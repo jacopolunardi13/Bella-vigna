@@ -15,13 +15,32 @@
  * this origin, and it is cleared from here when a device is handed on.
  */
 
-const TOKEN_KEY = storageKey('staff.token');
+/**
+ * Two ways to run, one app.
+ *
+ * On a property's own server (`/staff`) it is that house's Staff app, opened with
+ * the shared token. In the Staff console (`console.html`, `docs/STAFF-UNIFICATA.md`)
+ * the same screens serve every house a person works for: signed in with a passkey,
+ * each record wearing its house's badge, every request checked by the console's
+ * server against the person's role. The page hides what a role cannot do; the
+ * server is what refuses it.
+ */
+const CONSOLE = document.documentElement.dataset.staffMode === 'console';
+const keyFor = (suffix) => (CONSOLE ? `staff-console.${suffix}` : storageKey(suffix));
+const TOKEN_KEY = keyFor('staff.token');
+const SCOPE_KEY = keyFor('scope');
 
 const state = {
-  token: readToken(),
+  token: CONSOLE ? '' : readToken(),
   view: 'dashboard',
   data: {},
   busy: false,
+  /** Console: who is signed in, what they may do, which houses. */
+  me: null,
+  /** Console: 'all' or one house's id — what every list below shows. */
+  scope: 'all',
+  /** Console: the house a one-house screen (Sincronizzazione) is showing. */
+  focus: '',
 };
 
 const VIEWS = [
@@ -33,6 +52,7 @@ const VIEWS = [
   { id: 'cancelled', label: 'Annullati' },
   { id: 'reservations', label: 'Prenotazioni' },
   { id: 'sync', label: 'Sincronizzazione' },
+  ...(CONSOLE ? [{ id: 'access', label: 'Accesso' }] : []),
 ];
 
 /* ── Plumbing ──────────────────────────────────────────────────────────── */
@@ -96,10 +116,64 @@ const label = (value) => LABELS[value] ?? String(value ?? '');
  * yet, which is what a provisional stay from a calendar feed looks like.
  */
 const roomsText = (entry, none = '') => {
-  const list = roomsIn(entry);
+  // The console serves houses whose rooms this page does not know (LunArt's are
+  // numbers, Bella Vigna's names): it shows what the house's own server said.
+  const list = CONSOLE
+    ? [...new Set([...(entry.rooms ?? []), ...(entry.room ? [entry.room] : [])].map(String).filter(Boolean))]
+    : roomsIn(entry);
   if (list.length === 0) return none;
-  return `${list.length === 1 ? 'Camera' : 'Camere'} ${roomList(list)}`;
+  return `${list.length === 1 ? 'Camera' : 'Camere'} ${CONSOLE ? list.join(', ') : roomList(list)}`;
 };
+
+/* ── Houses (console) ──────────────────────────────────────────────────── */
+
+const can = (permission) => !CONSOLE || Boolean(state.me?.permissions?.includes(permission));
+const houses = () => state.me?.properties ?? [];
+const houseOf = (id) => houses().find((house) => house.id === id);
+const inScope = () => (state.scope === 'all' ? houses() : houses().filter((house) => house.id === state.scope));
+const houseName = (id) => (CONSOLE ? houseOf(id)?.name ?? id ?? '' : brand.name);
+
+/** The house a row belongs to, in words and colour. Nothing outside the console. */
+const badge = (id) => (CONSOLE && id
+  ? `<span class="pill pill--house" data-house="${esc(id)}">${esc(houseOf(id)?.name ?? id)}</span>`
+  : '');
+
+const scopeQuery = (extra = {}) => {
+  const params = new URLSearchParams(extra);
+  if (state.scope !== 'all') params.set('properties', state.scope);
+  const text = params.toString();
+  return text ? `?${text}` : '';
+};
+
+/** Every answer of a read across houses, each record stamped with its house. */
+const tagged = (list, result) => (list ?? []).map((item) => ({ ...item, property: result.property.id }));
+const sumCounts = (objects) => objects.reduce((total, counts) => {
+  for (const [key, value] of Object.entries(counts ?? {})) total[key] = (total[key] ?? 0) + (Number(value) || 0);
+  return total;
+}, {});
+
+/** The console's refusals, in words a person on shift can act on. */
+const ERRORS = {
+  forbidden: 'Non rientra nel tuo ruolo.',
+  'property-not-allowed': 'Non lavori per questa struttura.',
+  'property-unreachable': 'La struttura non risponde.',
+  'property-timeout': 'La struttura non ha risposto in tempo.',
+  'property-refused-console': 'La struttura non riconosce la console: credenziale da controllare.',
+  'property-mismatch': 'Ha risposto una struttura diversa da quella chiamata: configurazione da controllare.',
+  'property-bad-answer': 'Risposta non leggibile dalla struttura.',
+  'property-not-configured': 'Struttura non ancora collegata alla console.',
+  'step-up-required': 'Serve una conferma con la passkey.',
+  'too-many-attempts': 'Troppi tentativi: riprova più tardi.',
+  'invite-invalid': 'Link non valido, già usato o scaduto. Chiedine uno nuovo.',
+  'setup-code-invalid': 'Codice non corretto.',
+  'passkey-unknown': 'Questa passkey non è registrata (o è stata revocata).',
+  'passkey-refused': 'Passkey non accettata.',
+  'challenge-expired': 'Richiesta scaduta: riprova.',
+  'registration-refused': 'Registrazione della passkey non riuscita.',
+  'passkey-belongs-to-someone-else': 'Questa passkey è di un’altra persona.',
+  'cross-origin': 'Richiesta rifiutata.',
+};
+const errorText = (code) => ERRORS[code] ?? code ?? 'errore';
 
 const stamp = (iso) => (iso
   ? new Intl.DateTimeFormat('it-IT', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Rome' })
@@ -110,9 +184,22 @@ const stamp = (iso) => (iso
  * One request. A 401 means the token is wrong, which is the only error worth
  * interrupting somebody for: everything else is shown in place.
  */
-async function api(path, { method = 'GET', body, keepBody = false } = {}) {
-  const response = await fetch(`/api/staff${path}`, {
+async function api(path, { method = 'GET', body, keepBody = false, property = '' } = {}) {
+  const url = CONSOLE
+    ? `/console/api/p/${encodeURIComponent(property || state.focus || inScope()[0]?.id || '')}${path}`
+    : `/api/staff${path}`;
+  return request(url, { method, body, keepBody });
+}
+
+/** The console's own endpoints: sign-in, people, notifications, reads across houses. */
+const consoleApi = (path, options = {}) => request(`/console/api${path}`, options);
+
+const handled = () => Object.assign(new Error('handled'), { handled: true });
+
+async function request(url, { method = 'GET', body, keepBody = false, stepped = false } = {}) {
+  const response = await fetch(url, {
     method,
+    credentials: 'same-origin',
     headers: {
       ...(state.token ? { authorization: `Bearer ${state.token}` } : {}),
       ...(body ? { 'content-type': 'application/json' } : {}),
@@ -121,14 +208,23 @@ async function api(path, { method = 'GET', body, keepBody = false } = {}) {
   });
 
   if (response.status === 401) {
-    showGate('Token rifiutato.');
-    throw Object.assign(new Error('unauthorised'), { handled: true });
+    if (CONSOLE) showSignIn(state.me ? 'La sessione è scaduta: accedi di nuovo.' : '');
+    else showGate('Token rifiutato.');
+    throw handled();
   }
   const payload = await response.json().catch(() => ({}));
+  // A sensitive operation asks for the passkey once more, then goes through as it was.
+  if (CONSOLE && response.status === 403 && payload.error === 'step-up-required' && !stepped) {
+    await stepUp();
+    return request(url, { method, body, keepBody, stepped: true });
+  }
   // Some answers are refusals with something to say — "no mailbox is configured" is
   // a 503 and is exactly what the screen should print. Those are kept, not thrown.
   if (keepBody) return { status: response.status, ...payload };
-  if (!response.ok) throw Object.assign(new Error(payload.error ?? payload.reason ?? `errore ${response.status}`), { payload });
+  if (!response.ok) {
+    const code = payload.error ?? payload.reason;
+    throw Object.assign(new Error(CONSOLE ? errorText(code) : code ?? `errore ${response.status}`), { payload });
+  }
   return payload;
 }
 
@@ -155,15 +251,35 @@ function renderTabs() {
   }).join('');
 }
 
+/**
+ * Controls a role cannot use, hidden after drawing (console only). A courtesy:
+ * the console's server refuses them whatever the page shows.
+ */
+const NEEDS = [
+  ['[data-sync="repair"], [data-sync="backfill"], [data-sync="reconcile"], [data-sync="ical/inspect"]', 'sync.repair'],
+  ['[data-sync="poll"], [data-job]', 'sync.run'],
+  ['[data-sync="send-emails"], [data-catchup="send"]', 'emails.bulk'],
+  ['[data-catchup="preview"]', 'emails.bulk.preview'],
+  ['[data-refund-reconcile]', 'payments.reconcile'],
+  ['[data-resolve]', 'alerts.resolve'],
+];
+
 function paint(html) {
   $('#main').innerHTML = html;
   $('#main').scrollTop = 0;
+  if (CONSOLE) {
+    for (const [selector, permission] of NEEDS) {
+      if (can(permission)) continue;
+      for (const element of $('#main').querySelectorAll(selector)) element.hidden = true;
+    }
+  }
 }
 
 async function render() {
   renderTabs();
   try {
     if (state.view === 'dashboard') await renderDashboard();
+    else if (state.view === 'access') await renderAccess();
     else if (state.view === 'reservations') await renderReservations();
     else if (state.view === 'sync') await renderSync();
     else await renderQueue(state.view);
@@ -174,8 +290,34 @@ async function render() {
   renderTabs();
 }
 
+/**
+ * The console's "Oggi": every house in scope read at once, added up where a sum
+ * means something (orders, people in house) and listed with badges where it does
+ * not. A house that does not answer is named at the top, never silently missing.
+ */
+async function mergedDashboard() {
+  const { results } = await consoleApi(`/all/dashboard${scopeQuery()}`);
+  const ok = results.filter((result) => result.ok);
+  const byDate = (a, b) => String(a.date ?? a.check_in ?? '').localeCompare(String(b.date ?? b.check_in ?? ''));
+  return {
+    today: ok[0]?.data.today ?? new Date().toISOString().slice(0, 10),
+    orders: sumCounts(ok.map((result) => result.data.orders)),
+    arrivals: ok.flatMap((result) => tagged(result.data.arrivals, result)),
+    departures: ok.flatMap((result) => tagged(result.data.departures, result)),
+    next: ok.flatMap((result) => tagged(result.data.next, result)).sort(byDate),
+    inHouse: ok.reduce((n, result) => n + Number(result.data.inHouse ?? 0), 0),
+    alerts: ok.reduce((n, result) => n + Number(result.data.alerts ?? 0), 0),
+    guestCancellations: ok.flatMap((result) => tagged(result.data.guestCancellations, result)),
+    push: state.me?.push,
+    unreachable: results.filter((result) => !result.ok),
+  };
+}
+
+const unreachableBanner = (data) => (data.unreachable ?? []).map((result) => `
+  <div class="banner" data-tone="bad">${badge(result.property.id)} ${esc(errorText(result.data?.error))}</div>`).join('');
+
 async function renderDashboard() {
-  const data = await api('/dashboard');
+  const data = CONSOLE ? await mergedDashboard() : await api('/dashboard');
   state.data.counts = data.orders;
   $('#push-state').dataset.on = String(Boolean(data.push?.configured));
 
@@ -183,6 +325,7 @@ async function renderDashboard() {
     `<div class="stat" ${tone ? `data-tone="${tone}"` : ''}><span class="stat__value">${value}</span><span class="stat__label">${esc(label)}</span></div>`;
 
   paint(`
+    ${unreachableBanner(data)}
     ${data.alerts > 0 ? `<div class="banner" data-tone="warn">
       ${data.alerts} ${data.alerts === 1 ? 'cosa' : 'cose'} da verificare.
       <div class="actions"><button class="action" type="button" data-go="sync">Apri sincronizzazione</button></div>
@@ -218,6 +361,7 @@ async function renderDashboard() {
             <span class="row__amount">${esc(money(entry.amount, 'EUR'))}</span>
           </div>
           <p class="row__meta">
+            ${badge(entry.property)}
             ${entry.room ? `Camera ${esc(entry.room)}` : ''}
             ${entry.date ? ` · era per ${esc(day(entry.date))}${entry.time ? ` ${esc(entry.time)}` : ''}` : ''}
             · <span class="pill" data-tone="${entry.outcome === 'refunded' ? 'good' : 'warn'}">${esc(CANCEL_OUTCOMES[entry.outcome] ?? entry.outcome)}</span>
@@ -234,7 +378,7 @@ async function renderDashboard() {
           <span class="row__title">${esc(item.title)}</span>
           <span class="row__amount">${esc(day(item.date))}${item.time ? ` · ${esc(item.time)}` : ''}</span>
         </div>
-        <p class="row__meta">${item.room ? `Camera ${esc(item.room)}` : 'Camera da confermare'}</p>
+        <p class="row__meta">${badge(item.property)} ${item.room ? `Camera ${esc(item.room)}` : 'Camera da confermare'}</p>
       </div>`).join('')}` : ''}
 
     ${data.push?.configured ? '' : `<p class="note">Le notifiche push non sono configurate: l’app funziona, ma non arriva nulla sul telefono.</p>`}
@@ -259,12 +403,13 @@ function orderRow(order) {
       </span></div>` : ''}
     </div>`).join('');
 
-  return `<div class="row" data-order="${esc(order.id)}">
+  return `<div class="row" data-order="${esc(order.id)}" data-property="${esc(order.property ?? '')}">
     <div class="row__head">
       <span class="row__title">${order.express ? '<span class="pill pill--express">Express</span> ' : ''}${esc(order.lines[0]?.title ?? 'Ordine')}</span>
       <span class="row__amount">${esc(money(order.amount, order.currency))}</span>
     </div>
     <p class="row__meta">
+      ${badge(order.property)}
       ${esc(order.customer.name || '—')}${order.customer.room ? ` · camera ${esc(order.customer.room)}` : ''}
       · <span class="pill" data-tone="${tone}">${esc(label(order.status))}</span>
       <span class="pill">${esc(label(order.fulfilment_status))}</span>
@@ -283,19 +428,32 @@ function orderRow(order) {
       ${order.lines.some((l) => l.product_id === 'wine-in-room') && order.queue !== 'cancelled'
         ? '<button class="action" type="button" data-action="substitution">Bottiglia non disponibile</button>' : ''}
       <button class="action" type="button" data-contact>Contatta</button>
-      ${order.queue !== 'cancelled' ? '<button class="action action--danger" type="button" data-action="cancel">Annulla</button>' : ''}
-      ${order.status === 'paid' ? '<button class="action action--danger" type="button" data-action="refund">Rimborsa</button>' : ''}
+      ${order.queue !== 'cancelled' && can('orders.cancel') ? '<button class="action action--danger" type="button" data-action="cancel">Annulla</button>' : ''}
+      ${order.status === 'paid' && can('orders.refund') ? '<button class="action action--danger" type="button" data-action="refund">Rimborsa</button>' : ''}
     </div>
     <div data-contact-panel hidden></div>
   </div>`;
 }
 
 async function renderQueue(queue) {
-  const data = await api(`/orders?queue=${encodeURIComponent(queue)}`);
+  let data;
+  if (CONSOLE) {
+    const { results } = await consoleApi(`/all/orders${scopeQuery({ queue })}`);
+    const ok = results.filter((result) => result.ok);
+    data = {
+      counts: sumCounts(ok.map((result) => result.data.counts)),
+      // Newest first across houses, as the queue is within one.
+      orders: ok.flatMap((result) => tagged(result.data.orders, result))
+        .sort((a, b) => String(b.created_at ?? '').localeCompare(String(a.created_at ?? ''))),
+      unreachable: results.filter((result) => !result.ok),
+    };
+  } else {
+    data = await api(`/orders?queue=${encodeURIComponent(queue)}`);
+  }
   state.data.counts = data.counts;
-  paint(data.orders.length
+  paint(`${unreachableBanner(data)}${data.orders.length
     ? data.orders.map(orderRow).join('')
-    : '<p class="empty">Niente in questa coda.</p>');
+    : '<p class="empty">Niente in questa coda.</p>'}`);
 }
 
 /** The fields a provisional stay is still missing, in words rather than in keys. */
@@ -306,13 +464,14 @@ const FIELD_NAMES = {
 function reservationRow(reservation) {
   const tone = { active: 'good', modified: 'warn', cancelled: 'bad', completed: '' }[reservation.status] ?? '';
   const missing = reservation.incomplete ?? [];
-  return `<details class="row" data-reservation="${esc(reservation.id)}"${reservation.provisional ? ' data-provisional' : ''}>
+  return `<details class="row" data-reservation="${esc(reservation.id)}" data-property="${esc(reservation.property ?? '')}"${reservation.provisional ? ' data-provisional' : ''}>
     <summary>
       <div class="row__head">
         <span class="row__title">${esc([reservation.first_name, reservation.last_name].filter(Boolean).join(' ') || 'Ospite da identificare')}</span>
         <span class="row__amount">${esc(day(reservation.check_in))} → ${esc(day(reservation.check_out))}</span>
       </div>
       <p class="row__meta">
+        ${badge(reservation.property)}
         ${esc(roomsText(reservation, 'camera da assegnare'))}
         · ${esc(reservation.guest_count ?? 0)} ospiti
         · <span class="pill" data-tone="${tone}">${esc(label(reservation.status))}</span>
@@ -328,17 +487,18 @@ function reservationRow(reservation) {
     </p>` : ''}
     <div class="row__fields">
       <div><span>Prenotazione</span><span class="mono">${esc(reservation.booking_reference || '—')}</span></div>
-      <div><span>Riferimento ${esc(brand.name)}</span><span class="mono">${esc(reservation.staff_ref || '—')}</span></div>
+      <div><span>Riferimento ${esc(houseName(reservation.property))}</span><span class="mono">${esc(reservation.staff_ref || '—')}</span></div>
       <div><span>Email</span><span>${esc(reservation.guest_email || '—')}</span></div>
       <div><span>Telefono</span><span>${esc(reservation.guest_phone || '—')}</span></div>
       <div><span>Email guida</span><span>${esc(label(reservation.guide_email_status))}${reservation.guide_email_sent_at ? ` · ${esc(stamp(reservation.guide_email_sent_at))}` : ''}</span></div>
       ${reservation.notes ? `<div><span>Note</span><span>${esc(reservation.notes)}</span></div>` : ''}
     </div>
     <div class="actions">
+      ${can('reservations.manage') ? `
       <button class="action" type="button" data-link>Copia link guida</button>
       <button class="action" type="button" data-link-rotate>Rigenera link</button>
-      <button class="action" type="button" data-edit>Modifica</button>
-      ${reservation.status !== 'cancelled' ? '<button class="action action--danger" type="button" data-cancel>Annulla</button>' : ''}
+      <button class="action" type="button" data-edit>Modifica</button>` : ''}
+      ${reservation.status !== 'cancelled' && can('reservations.cancel') ? '<button class="action action--danger" type="button" data-cancel>Annulla</button>' : ''}
     </div>
     <div data-reservation-panel hidden></div>
   </details>`;
@@ -359,10 +519,33 @@ const GROUP_NAMES = {
   history: 'Storico',
 };
 
+/** The console's Prenotazioni: the same groups, each filled from every house in scope. */
+async function mergedReservations() {
+  const { results } = await consoleApi(`/all/reservations${scopeQuery()}`);
+  const groups = {};
+  const order = [];
+  let needsData = 0;
+  for (const result of results.filter((r) => r.ok)) {
+    needsData += Number(result.data.needsData ?? 0);
+    for (const id of result.data.order ?? Object.keys(result.data.groups ?? {})) {
+      if (!order.includes(id)) order.push(id);
+      groups[id] = [...(groups[id] ?? []), ...tagged(result.data.groups?.[id], result)];
+    }
+  }
+  for (const id of order) groups[id].sort((a, b) => String(a.check_in ?? '').localeCompare(String(b.check_in ?? '')));
+  return { groups, order, needsData, unreachable: results.filter((r) => !r.ok) };
+}
+
+/** The rooms a house has, for the manual form: what its server listed, or the console's fallback. */
+const roomsOfHouse = (id) => (CONSOLE ? (houseOf(id)?.rooms ?? []).map((room) => room.id ?? room) : ROOM_IDS);
+const roomOptions = (id) => ['<option value="">—</option>',
+  ...roomsOfHouse(id).map((room) => `<option value="${esc(room)}">${esc(room)}</option>`)].join('');
+
 async function renderReservations() {
-  const data = await api('/reservations');
+  const data = CONSOLE ? await mergedReservations() : await api('/reservations');
   const groups = data.groups ?? {};
   const order = data.order ?? Object.keys(groups);
+  const formHouse = state.scope !== 'all' ? state.scope : houses()[0]?.id ?? '';
 
   const group = (id) => {
     const rows = groups[id] ?? [];
@@ -378,13 +561,19 @@ async function renderReservations() {
   };
 
   paint(`
+    ${unreachableBanner(data)}
     <h2>Prenotazioni</h2>
     ${data.needsData ? `<p class="note note--warn">${data.needsData} ${data.needsData === 1 ? 'soggiorno ha' : 'soggiorni hanno'} dati ospite da completare.</p>` : ''}
     ${order.some((id) => (groups[id] ?? []).length) ? order.map(group).join('') : '<p class="empty">Nessuna prenotazione.</p>'}
 
-    <h2>Inserimento manuale</h2>
+    ${can('reservations.manage') ? `<h2>Inserimento manuale</h2>
     <p class="note">Da usare quando la notifica non è arrivata. Il resto funziona uguale: link personale e email programmata.</p>
     <form id="manual">
+      ${CONSOLE ? `<label class="field"><span class="field__label">Struttura</span>
+        <select name="property" data-room-source required>
+          ${houses().map((house) => `<option value="${esc(house.id)}"${house.id === formHouse ? ' selected' : ''}>${esc(house.name)}</option>`).join('')}
+        </select>
+      </label>` : ''}
       <div class="field--pair">
         <label class="field"><span class="field__label">Nome</span><input name="first_name" required></label>
         <label class="field"><span class="field__label">Cognome</span><input name="last_name" required></label>
@@ -395,9 +584,8 @@ async function renderReservations() {
       </div>
       <div class="field--pair">
         <label class="field"><span class="field__label">Camera</span>
-          <select name="room">
-            <option value="">—</option>
-            ${ROOM_IDS.map((room) => `<option value="${esc(room)}">${esc(room)}</option>`).join('')}
+          <select name="room" data-rooms>
+            ${roomOptions(formHouse)}
           </select>
         </label>
         <label class="field"><span class="field__label">N. prenotazione</span><input name="booking_reference"></label>
@@ -414,7 +602,7 @@ async function renderReservations() {
       <label class="field"><span class="field__label">Note</span><textarea name="notes"></textarea></label>
       <div class="actions"><button class="action action--primary" type="submit">Crea prenotazione</button></div>
     </form>
-    <div id="manual-result"></div>
+    <div id="manual-result"></div>` : ''}
   `);
 }
 
@@ -664,7 +852,24 @@ function pushTestSummary(result) {
 }
 
 async function renderSync() {
-  const data = await api('/sync');
+  let switcher = '';
+  if (CONSOLE) {
+    const pool = inScope();
+    if (!pool.some((house) => house.id === state.focus)) state.focus = pool[0]?.id ?? '';
+    switcher = pool.length > 1 ? `<div class="focus" role="group" aria-label="Struttura">
+      ${pool.map((house) => `<button class="scope__chip" type="button" data-focus="${esc(house.id)}" data-house="${esc(house.id)}"
+        aria-pressed="${house.id === state.focus}">${esc(house.name)}</button>`).join('')}
+    </div>` : '';
+  }
+  let data;
+  try {
+    data = await api('/sync');
+  } catch (error) {
+    // One house not answering must not hide the switch to the other.
+    if (!CONSOLE || error.handled) throw error;
+    paint(`${switcher}<div class="banner" data-tone="bad">${badge(state.focus)} ${esc(error.message)}</div>`);
+    return;
+  }
 
   /**
    * One row per integration, saying which of four things is true.
@@ -716,12 +921,13 @@ async function renderSync() {
     </div>`;
 
   paint(`
-    <h2>Integrazioni</h2>
+    ${switcher}
+    <h2>Integrazioni${CONSOLE ? ` · ${esc(houseName(state.focus))}` : ''}</h2>
     ${row('Lettura notifiche QuoVai', data.mailbox, data.mailbox?.id ? `Sorgente: ${data.mailbox.id}` : 'Nessuna casella collegata')}
     ${row('Invio email agli ospiti', data.mail, `Provider: ${data.mail?.provider ?? '—'}${data.mail?.configured ? '' : ' — le email vengono preparate ma non spedite'}`)}
     ${row('Notifiche push', data.push, data.push?.configured ? `Trasporto: ${data.push.transport}` : 'L’app funziona lo stesso: si aggiorna da sola quando la apri')}
     ${row('Calendario del professionista', data.calendar, data.calendar?.id ?? '')}
-    <div class="actions">
+    ${CONSOLE ? '<p class="note">Le notifiche ai telefoni partono dalla console: si attivano e si provano da “Accesso”.</p>' : `<div class="actions">
       <button class="action" type="button" data-push-test="now">Invia una notifica di prova</button>
     </div>
     <p class="note">
@@ -729,7 +935,7 @@ async function renderSync() {
       da fare in partenza: aprite l’app sui due telefoni, premete qui una volta e
       controllate che la notifica arrivi su entrambi. Le chiavi si configurano come
       variabili d’ambiente sul server — non si vedono e non si impostano da qui.
-    </p>
+    </p>`}
     <div id="push-result"></div>
 
     <h2>Sincronizzazione prenotazioni</h2>
@@ -797,7 +1003,7 @@ async function renderSync() {
       Solo per il caso raro di un rimborso fatto su un account Stripe diverso, il cui
       webhook non arriva qui. <strong>Non chiama Stripe e non muove soldi</strong>:
       il rimborso è già avvenuto e verificato, e questo serve solo a farlo sapere a
-      ${esc(brand.name)}. Segna l’ordine come rimborsato per l’intero importo e revoca la
+      ${esc(houseName(state.focus))}. Segna l’ordine come rimborsato per l’intero importo e revoca la
       Privilege Card che quell’ordine aveva emesso — il QR smette di funzionare e i
       vantaggi partner non valgono più. Lo storico resta. Si può rilanciare: la
       seconda volta non cambia niente.
@@ -1020,11 +1226,11 @@ const alertTitle = (kind) => ({
 
 /* ── Interaction ───────────────────────────────────────────────────────── */
 
-async function act(orderId, action, extra = {}) {
+async function act(orderId, action, extra = {}, property = '') {
   if (state.busy) return;
   state.busy = true;
   try {
-    const result = await api(`/orders/${encodeURIComponent(orderId)}/${action}`, { method: 'POST', body: extra });
+    const result = await api(`/orders/${encodeURIComponent(orderId)}/${action}`, { method: 'POST', body: extra, property });
     if (result.refund_outstanding) {
       alert('Annullato. L’incasso resta da rimborsare: usa Rimborsa quando è deciso.');
     }
@@ -1037,6 +1243,8 @@ async function act(orderId, action, extra = {}) {
 }
 
 document.addEventListener('click', async (event) => {
+  if (CONSOLE && await consoleClick(event)) return;
+
   const tab = event.target.closest('[data-view]');
   if (tab) {
     state.view = tab.dataset.view;
@@ -1056,7 +1264,7 @@ document.addEventListener('click', async (event) => {
     const action = actionButton.dataset.action;
     if (['cancel', 'refund', 'reject'].includes(action)
       && !confirm({ cancel: 'Annullare l’ordine?', refund: 'Rimborsare l’importo?', reject: 'Rifiutare e liberare l’autorizzazione?' }[action])) return;
-    await act(row.dataset.order, action);
+    await act(row.dataset.order, action, {}, row.dataset.property);
     return;
   }
 
@@ -1064,7 +1272,7 @@ document.addEventListener('click', async (event) => {
   if (contact) {
     const row = contact.closest('[data-order]');
     const panel = row.querySelector('[data-contact-panel]');
-    const info = await api(`/orders/${encodeURIComponent(row.dataset.order)}/contact`);
+    const info = await api(`/orders/${encodeURIComponent(row.dataset.order)}/contact`, { property: row.dataset.property });
     panel.hidden = false;
     panel.innerHTML = `<div class="actions">
       ${info.whatsapp ? `<a class="action" href="${esc(info.whatsapp)}" target="_blank" rel="noopener">WhatsApp</a>` : ''}
@@ -1080,7 +1288,7 @@ document.addEventListener('click', async (event) => {
     const row = linkButton.closest('[data-reservation]');
     const rotate = 'linkRotate' in linkButton.dataset;
     if (rotate && !confirm('Rigenerare il link? Quello vecchio smette di funzionare.')) return;
-    const result = await api(`/reservations/${encodeURIComponent(row.dataset.reservation)}/link`, { method: 'POST', body: { rotate } });
+    const result = await api(`/reservations/${encodeURIComponent(row.dataset.reservation)}/link`, { method: 'POST', body: { rotate }, property: row.dataset.property });
     const panel = row.querySelector('[data-reservation-panel]');
     panel.hidden = false;
     panel.innerHTML = `<p class="note mono">${esc(result.link)}</p>`;
@@ -1116,7 +1324,7 @@ document.addEventListener('click', async (event) => {
     const row = cancelReservation.closest('[data-reservation]');
     const reason = prompt('Motivo dell’annullamento (facoltativo)');
     if (reason === null) return;
-    await api(`/reservations/${encodeURIComponent(row.dataset.reservation)}/cancel`, { method: 'POST', body: { reason } });
+    await api(`/reservations/${encodeURIComponent(row.dataset.reservation)}/cancel`, { method: 'POST', body: { reason }, property: row.dataset.property });
     await render();
     return;
   }
@@ -1330,10 +1538,10 @@ document.addEventListener('submit', async (event) => {
   const manual = event.target.closest('#manual');
   if (manual) {
     event.preventDefault();
-    const data = Object.fromEntries(new FormData(manual).entries());
+    const { property, ...data } = Object.fromEntries(new FormData(manual).entries());
     try {
-      const result = await api('/reservations', { method: 'POST', body: data });
-      $('#manual-result').innerHTML = `<div class="banner" data-tone="">Creata: ${esc(result.reservation.staff_ref)}</div>`;
+      const result = await api('/reservations', { method: 'POST', body: data, property });
+      $('#manual-result').innerHTML = `<div class="banner" data-tone="">${badge(property)} Creata: ${esc(result.reservation.staff_ref)}</div>`;
       await render();
     } catch (error) {
       if (!error.handled) $('#manual-result').innerHTML = `<div class="banner" data-tone="bad">${esc(error.message)}</div>`;
@@ -1346,7 +1554,7 @@ document.addEventListener('submit', async (event) => {
     event.preventDefault();
     const row = edit.closest('[data-reservation]');
     const patch = Object.fromEntries([...new FormData(edit).entries()].filter(([, value]) => String(value).trim() !== ''));
-    await api(`/reservations/${encodeURIComponent(row.dataset.reservation)}/edit`, { method: 'POST', body: patch });
+    await api(`/reservations/${encodeURIComponent(row.dataset.reservation)}/edit`, { method: 'POST', body: patch, property: row.dataset.property });
     await render();
   }
 });
@@ -1363,6 +1571,7 @@ document.addEventListener('submit', async (event) => {
  */
 async function offerNotifications() {
   if (!('serviceWorker' in navigator) || !('PushManager' in window)) return;
+  if (CONSOLE) return;
   try {
     const { push } = await api('/dashboard');
     if (!push?.configured || !push.publicKey) return;
@@ -1378,6 +1587,462 @@ async function offerNotifications() {
     });
     await api('/push/subscribe', { method: 'POST', body: { subscription: subscription.toJSON(), label: navigator.platform } });
   } catch { /* notifications are a convenience, never a blocker */ }
+}
+
+/* ── The console: signing in, houses, access ───────────────────────────── */
+
+/**
+ * Passkeys, through @simplewebauthn/browser (vendored, loaded by `console.html`).
+ *
+ * Every passkey question is asked from a button the person taps, with the
+ * server's options already fetched: phones (Safari above all) only show the
+ * Face ID prompt in direct answer to a tap, and a network round trip in between
+ * can cost that.
+ */
+const passkeys = () => window.SimpleWebAuthnBrowser;
+
+const PASSKEY_ERRORS = {
+  NotAllowedError: 'Operazione annullata o scaduta.',
+  InvalidStateError: 'Questo dispositivo ha già una passkey per questo accesso.',
+  SecurityError: 'Il browser ha rifiutato la passkey per questo indirizzo.',
+  NotSupportedError: 'Questo browser non supporta le passkey.',
+};
+const passkeyError = (error) => PASSKEY_ERRORS[error?.name] ?? PASSKEY_ERRORS[error?.cause?.name] ?? error?.message ?? 'Passkey non riuscita.';
+
+/** A short name for this device, to recognise its passkey in the list later. */
+function deviceLabel() {
+  const ua = navigator.userAgent;
+  const os = /iPhone/.test(ua) ? 'iPhone' : /iPad/.test(ua) ? 'iPad' : /Android/.test(ua) ? 'Android'
+    : /Mac OS X/.test(ua) ? 'Mac' : /Windows/.test(ua) ? 'Windows' : 'Dispositivo';
+  return `${os} · ${new Date().toLocaleDateString('it-IT')}`;
+}
+
+/**
+ * One passkey question as a sheet: title, words, one button. `prepare` fetches the
+ * server's options as the sheet opens; `run` uses them on the tap. Resolves with
+ * what `run` returned, or rejects (handled) if the person closes the sheet.
+ */
+function passkeySheet({ title, text, button, prepare, run }) {
+  return new Promise((resolve, reject) => {
+    const sheet = document.createElement('div');
+    sheet.className = 'sheet';
+    sheet.innerHTML = `<div class="sheet__panel" role="dialog" aria-modal="true" aria-labelledby="sheet-title">
+      <h2 id="sheet-title">${esc(title)}</h2>
+      <p>${esc(text)}</p>
+      <div class="actions">
+        <button class="action action--primary" type="button" data-sheet-go disabled>${esc(button)}</button>
+        <button class="action" type="button" data-sheet-close>Annulla</button>
+      </div>
+      <p class="sheet__note" hidden></p>
+    </div>`;
+    document.body.append(sheet);
+    const go = sheet.querySelector('[data-sheet-go]');
+    const note = sheet.querySelector('.sheet__note');
+    const say = (message) => { note.hidden = !message; note.textContent = message; };
+    let options = null;
+    const load = () => prepare().then((value) => { options = value; go.disabled = false; }).catch((error) => say(error.message));
+    load();
+    go.focus();
+    sheet.addEventListener('click', async (event) => {
+      if (event.target.closest('[data-sheet-close]')) {
+        sheet.remove();
+        reject(handled());
+        return;
+      }
+      if (!event.target.closest('[data-sheet-go]') || !options) return;
+      go.disabled = true;
+      try {
+        const result = await run(options);
+        sheet.remove();
+        resolve(result);
+      } catch (error) {
+        say(error.handled ? '' : passkeyError(error));
+        options = null;
+        load();
+      }
+    });
+  });
+}
+
+/** A fresh passkey check, for refunds, bulk email and managing access. */
+function stepUp() {
+  return passkeySheet({
+    title: 'Conferma con la passkey',
+    text: 'È un’operazione sensibile: confermala con Face ID, impronta o PIN. Vale cinque minuti.',
+    button: 'Conferma',
+    prepare: () => consoleApi('/step-up/options', { method: 'POST', body: {} }),
+    run: async (options) => {
+      const response = await passkeys().startAuthentication({ optionsJSON: options });
+      return consoleApi('/step-up/verify', { method: 'POST', body: { response } });
+    },
+  });
+}
+
+/* Signing in --------------------------------------------------------------- */
+
+let signInOptions = null;
+
+function showSignIn(note = '') {
+  const gate = $('#gate');
+  gate.hidden = false;
+  $('#gate-panel').innerHTML = `
+    <h1>Staff LunArt · Bella Vigna</h1>
+    <p>Accedi con la tua passkey: Face ID, impronta o il PIN del telefono. Niente password.</p>
+    <button class="action action--primary" type="button" id="sign-in">Accedi con passkey</button>
+    <p class="gate__note" id="gate-note" ${note ? '' : 'hidden'}>${esc(note)}</p>
+    <details class="gate__more">
+      <summary>Primo accesso del titolare, o ripristino</summary>
+      <p>Il codice di attivazione è nelle impostazioni del servizio (<span class="mono">CONSOLE_SETUP_CODE</span>), visibile solo a chi gestisce l’hosting.</p>
+      <label class="field"><span class="field__label">Codice di attivazione</span>
+        <input type="password" id="setup-code" autocomplete="off"></label>
+      <button class="action" type="button" id="setup-go">Crea la passkey del titolare</button>
+    </details>`;
+  signInOptions = null;
+  consoleApi('/sign-in/options', { method: 'POST', body: {} }).then((options) => { signInOptions = options; }).catch(() => {});
+}
+
+const gateNote = (message) => {
+  const note = $('#gate-note');
+  if (!note) return;
+  note.hidden = !message;
+  note.textContent = message;
+};
+
+async function signIn() {
+  try {
+    const options = signInOptions ?? await consoleApi('/sign-in/options', { method: 'POST', body: {} });
+    signInOptions = null;
+    const response = await passkeys().startAuthentication({ optionsJSON: options });
+    const result = await consoleApi('/sign-in/verify', { method: 'POST', body: { response }, keepBody: true });
+    if (!result.ok) { gateNote(errorText(result.error)); showSignInOptionsAgain(); return; }
+    await enterConsole();
+  } catch (error) {
+    if (!error.handled) gateNote(passkeyError(error));
+    showSignInOptionsAgain();
+  }
+}
+
+const showSignInOptionsAgain = () => {
+  consoleApi('/sign-in/options', { method: 'POST', body: {} }).then((options) => { signInOptions = options; }).catch(() => {});
+};
+
+/** Enrol a passkey on this device: by invitation, by setup code, or as a second device. */
+async function enrolPasskey(start, { title, text }) {
+  return passkeySheet({
+    title,
+    text,
+    button: 'Crea la passkey',
+    prepare: async () => {
+      const answer = await consoleApi('/enrol/options', { method: 'POST', body: start, keepBody: true });
+      if (answer.error) throw new Error(errorText(answer.error));
+      return answer.options;
+    },
+    run: async (options) => {
+      const response = await passkeys().startRegistration({ optionsJSON: options });
+      const result = await consoleApi('/enrol/verify', { method: 'POST', body: { response, label: deviceLabel() }, keepBody: true });
+      if (!result.ok) throw new Error(errorText(result.error));
+      return result;
+    },
+  });
+}
+
+/** Someone opened an invitation link (`#invito=…`): say whose it is, then enrol. */
+async function acceptInvite(invite) {
+  const gate = $('#gate');
+  gate.hidden = false;
+  history.replaceState(null, '', '/');
+  const described = await consoleApi('/invite/describe', { method: 'POST', body: { invite }, keepBody: true });
+  if (described.error) {
+    $('#gate-panel').innerHTML = `<h1>Link non valido</h1><p>${esc(errorText(described.error))}</p>
+      <button class="action action--primary" type="button" id="to-sign-in">Vai all’accesso</button>`;
+    return;
+  }
+  const recover = described.purpose === 'recover';
+  $('#gate-panel').innerHTML = `
+    <h1>Ciao ${esc(described.user.name)}</h1>
+    <p>${recover
+    ? 'Questo link ti fa creare una nuova passkey su questo telefono, al posto di quella persa.'
+    : 'Crea la tua passkey su questo telefono: d’ora in poi entrerai con Face ID, impronta o PIN.'}
+      Il link vale una volta sola.</p>
+    <button class="action action--primary" type="button" id="invite-go">Crea la passkey</button>
+    <p class="gate__note" id="gate-note" hidden></p>`;
+  $('#invite-go').addEventListener('click', async () => {
+    try {
+      await enrolPasskey({ invite }, {
+        title: 'La tua passkey',
+        text: 'Il telefono ti chiederà Face ID, impronta o PIN e la salverà nel suo portachiavi.',
+      });
+      await enterConsole();
+    } catch (error) {
+      if (!error.handled) gateNote(error.message);
+    }
+  });
+}
+
+async function enterConsole(wanted = '') {
+  state.me = await consoleApi('/me');
+  $('#gate').hidden = true;
+  let saved = 'all';
+  try { saved = localStorage.getItem(SCOPE_KEY) || 'all'; } catch { /* private mode */ }
+  const pick = wanted || saved;
+  state.scope = pick === 'all' || houseOf(pick) ? pick : 'all';
+  if (houses().length === 1) state.scope = houses()[0].id;
+  $('#account').hidden = false;
+  renderScope();
+  await start();
+}
+
+/* Houses ------------------------------------------------------------------- */
+
+function renderScope() {
+  const scope = $('#scope');
+  const list = houses();
+  $('#bar-scope').textContent = list.map((house) => house.name).join(' · ') || '—';
+  scope.hidden = list.length < 2;
+  if (scope.hidden) return;
+  const chip = (id, name) => `<button class="scope__chip" type="button" data-scope="${esc(id)}"${id === 'all' ? '' : ` data-house="${esc(id)}"`}
+    aria-pressed="${state.scope === id}">${esc(name)}</button>`;
+  scope.innerHTML = chip('all', 'Tutte') + list.map((house) => chip(house.id, house.name)).join('');
+}
+
+/* Access ------------------------------------------------------------------- */
+
+const ROLE_WORDS = {
+  owner: 'Titolare: tutto, compreso chi ha accesso.',
+  manager: 'Direzione: operatività, rimborsi, invii massivi, riparazioni, registro.',
+  frontdesk: 'Front desk: prenotazioni, arrivi, richieste degli ospiti e ordini.',
+};
+
+async function renderAccess() {
+  const [mine, people, audit, notes] = await Promise.all([
+    consoleApi('/me/passkeys'),
+    can('access.manage') ? consoleApi('/people') : null,
+    can('audit.view') ? consoleApi('/audit?limit=40') : null,
+    consoleApi('/notifications'),
+  ]);
+  const me = state.me;
+  const permission = 'Notification' in window ? Notification.permission : 'unsupported';
+
+  paint(`
+    <h2>${esc(me.user.name)} <span class="pill">${esc(me.user.roleLabel)}</span></h2>
+    <p class="note">${esc(ROLE_WORDS[me.user.role] ?? '')}</p>
+    <p class="row__meta">${houses().map((house) => badge(house.id)).join(' ')}</p>
+
+    <h2>Le tue passkey</h2>
+    ${mine.passkeys.map((key) => `<div class="row">
+      <div class="row__head"><span class="row__title">${esc(key.label)}</span>
+        ${key.synced ? '<span class="pill" data-tone="good">sincronizzata</span>' : '<span class="pill">solo su questo dispositivo</span>'}</div>
+      <p class="row__meta">creata ${esc(stamp(key.created_at))} · usata ${esc(stamp(key.last_used_at))}</p>
+      <div class="actions"><button class="action action--danger" type="button" data-revoke-mine="${esc(key.id)}">Revoca</button></div>
+    </div>`).join('') || '<p class="empty">Nessuna passkey.</p>'}
+    <div class="actions"><button class="action" type="button" data-add-device>Aggiungi un altro dispositivo</button></div>
+    <p class="note">Con due passkey (telefono e computer), o una passkey sincronizzata dal portachiavi
+      del telefono, perdere un dispositivo non ti chiude fuori.</p>
+
+    <h2>Notifiche</h2>
+    <p class="note">${me.push?.configured
+    ? (permission === 'granted' ? 'Autorizzate su questo dispositivo.' : permission === 'denied'
+      ? 'Bloccate nelle impostazioni del browser per questo sito.' : 'Non ancora attivate su questo dispositivo.')
+    : 'Le notifiche push non sono configurate sulla console.'}</p>
+    <div class="actions">
+      <button class="action" type="button" data-enable-push ${me.push?.configured && permission !== 'denied' ? '' : 'disabled'}>Attiva su questo telefono</button>
+      <button class="action" type="button" data-console-push-test>Notifica di prova</button>
+    </div>
+    <div id="push-result"></div>
+    ${notes.notifications.length ? `<h3 class="group">Ultimi avvisi</h3><ul class="log">
+      ${notes.notifications.slice(0, 15).map((n) => `<li>${badge(n.property?.id)} <strong>${esc(n.title)}</strong><br>${esc(n.body)} · ${esc(stamp(n.at))}</li>`).join('')}
+    </ul>` : ''}
+
+    <h2>Dispositivi collegati</h2>
+    <ul class="log">${mine.sessions.map((session) => `<li><strong>${esc(session.device || 'Dispositivo')}</strong>
+      ${session.current ? ' · questo' : ''} · ultimo uso ${esc(stamp(session.last_seen_at))}</li>`).join('')}</ul>
+    <div class="actions"><button class="action" type="button" data-sign-out>Esci da questo dispositivo</button></div>
+
+    ${people ? `<h2>Persone</h2>
+      <p class="note">I link di accesso valgono una volta sola: consegnali di persona o con una chiamata,
+        mai in un gruppo. Il recupero serve quando un telefono è perso.</p>
+      ${people.people.map((person) => `<div class="row" data-person="${esc(person.id)}">
+        <div class="row__head"><span class="row__title">${esc(person.name)}</span><span class="pill">${esc(person.roleLabel)}</span></div>
+        <p class="row__meta">${person.properties.map((house) => badge(house.id)).join(' ')}
+          · ${person.passkeys.length} passkey · ${person.sessions} dispositivi
+          ${person.last_seen_at ? ` · visto ${esc(stamp(person.last_seen_at))}` : ''}
+          ${person.invite_pending_until ? ` · <span class="pill" data-tone="warn">link attivo fino a ${esc(stamp(person.invite_pending_until))}</span>` : ''}</p>
+        ${person.passkeys.map((key) => `<div class="row__fields"><div><span>${esc(key.label)}</span>
+          <span><button class="action action--danger" type="button" data-revoke-person="${esc(key.id)}">Revoca</button></span></div></div>`).join('')}
+        <div class="actions">
+          <button class="action" type="button" data-invite="enroll">${person.passkeys.length ? 'Nuovo dispositivo' : 'Link di primo accesso'}</button>
+          ${person.passkeys.length ? '<button class="action action--danger" type="button" data-invite="recover">Telefono perso</button>' : ''}
+          ${person.sessions ? '<button class="action" type="button" data-person-sign-out>Disconnetti ovunque</button>' : ''}
+        </div>
+        <div data-person-panel hidden></div>
+      </div>`).join('')}` : ''}
+
+    ${audit ? `<h2>Registro</h2><ul class="log">
+      ${audit.entries.map((entry) => `<li>${esc(stamp(entry.at))} · <strong>${esc(entry.actor)}</strong> · ${esc(entry.action)}
+        ${entry.property ? badge(entry.property) : ''} ${entry.target ? `<span class="mono">${esc(entry.target)}</span>` : ''}
+        ${entry.outcome !== 'ok' ? `<span class="pill" data-tone="warn">${esc(entry.outcome)}</span>` : ''}</li>`).join('')}
+    </ul>` : ''}
+  `);
+}
+
+async function enableConsolePush(out) {
+  try {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) throw new Error('Questo browser non riceve notifiche push (su iPhone: aggiungi prima la console alla schermata Home).');
+    const granted = await Notification.requestPermission();
+    if (granted !== 'granted') throw new Error('Permesso non concesso.');
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: state.me.push.publicKey });
+    await consoleApi('/push/subscribe', { method: 'POST', body: { subscription: subscription.toJSON(), label: deviceLabel() } });
+    out.innerHTML = '<div class="banner">Notifiche attive su questo dispositivo.</div>';
+  } catch (error) {
+    if (!error.handled) out.innerHTML = `<div class="banner" data-tone="bad">${esc(error.message)}</div>`;
+  }
+}
+
+/** Show a link once, with a way to copy or share it. */
+function showLink(panel, { link, expires_at: expires }) {
+  panel.hidden = false;
+  panel.innerHTML = `<div class="link-out mono">${esc(link)}</div>
+    <p class="note">Vale una volta sola, fino a ${esc(stamp(expires))}. Non resta salvato da nessuna parte: se lo perdi, creane un altro.</p>
+    <div class="actions">
+      <button class="action" type="button" data-copy="${esc(link)}">Copia</button>
+      ${navigator.share ? `<button class="action" type="button" data-share="${esc(link)}">Condividi</button>` : ''}
+    </div>`;
+}
+
+/** The console's own controls. Returns true when it handled the click. */
+async function consoleClick(event) {
+  const target = event.target;
+  if (target.closest('#sign-in')) { await signIn(); return true; }
+  if (target.closest('#to-sign-in')) { showSignIn(); return true; }
+  if (target.closest('#setup-go')) {
+    const code = $('#setup-code').value;
+    if (!code) return true;
+    try {
+      await enrolPasskey({ setupCode: code }, {
+        title: 'Passkey del titolare',
+        text: 'Crea la passkey su questo dispositivo. Dopo, cambia il codice di attivazione nelle impostazioni del servizio.',
+      });
+      await enterConsole();
+    } catch (error) {
+      if (!error.handled) gateNote(error.message);
+    }
+    return true;
+  }
+
+  const scope = target.closest('[data-scope]');
+  if (scope) {
+    state.scope = scope.dataset.scope;
+    try { localStorage.setItem(SCOPE_KEY, state.scope); } catch { /* private mode */ }
+    renderScope();
+    await render();
+    return true;
+  }
+  const focus = target.closest('[data-focus]');
+  if (focus) { state.focus = focus.dataset.focus; await render(); return true; }
+
+  if (target.closest('#account')) { state.view = 'access'; location.hash = '#access'; await render(); return true; }
+
+  if (target.closest('[data-sign-out]')) {
+    await consoleApi('/sign-out', { method: 'POST', body: {} });
+    state.me = null;
+    showSignIn('Sei uscito.');
+    return true;
+  }
+  if (target.closest('[data-add-device]')) {
+    try {
+      await enrolPasskey({}, {
+        title: 'Un altro dispositivo',
+        text: 'Crea una passkey su questo dispositivo. Ti verrà chiesta prima la passkey attuale, se serve.',
+      });
+      await render();
+    } catch (error) {
+      if (error.payload?.error === 'step-up-required' || /passkey/i.test(error.message)) {
+        try { await stepUp(); await render(); } catch { /* closed */ }
+      } else if (!error.handled) alert(error.message);
+    }
+    return true;
+  }
+  const revokeMine = target.closest('[data-revoke-mine]');
+  if (revokeMine) {
+    if (!confirm('Revocare questa passkey? Il dispositivo che la usa verrà disconnesso.')) return true;
+    await consoleApi(`/me/passkeys/${encodeURIComponent(revokeMine.dataset.revokeMine)}/revoke`, { method: 'POST', body: {} });
+    await render();
+    return true;
+  }
+  if (target.closest('[data-enable-push]')) { await enableConsolePush($('#push-result')); return true; }
+  if (target.closest('[data-console-push-test]')) {
+    const result = await consoleApi('/push/test', { method: 'POST', body: {} });
+    $('#push-result').innerHTML = `<div class="banner">${result.devices
+      ? `Inviata a ${result.delivered} di ${result.devices} dispositivi${result.simulated ? ' (simulata)' : ''}.`
+      : 'Nessun dispositivo attivato per te: premi prima “Attiva su questo telefono”.'}</div>`;
+    return true;
+  }
+
+  const person = target.closest('[data-person]');
+  if (person) {
+    const id = person.dataset.person;
+    const panel = person.querySelector('[data-person-panel]');
+    const invite = target.closest('[data-invite]');
+    if (invite) {
+      const recover = invite.dataset.invite === 'recover';
+      if (recover && !confirm('Telefono perso: tutte le passkey di questa persona verranno revocate quando userà il nuovo link. Procedere?')) return true;
+      try {
+        const result = await consoleApi(`/people/${encodeURIComponent(id)}/invite`, {
+          method: 'POST', body: { purpose: recover ? 'recover' : 'enroll', revokeExisting: recover },
+        });
+        showLink(panel, result);
+      } catch (error) { if (!error.handled) alert(error.message); }
+      return true;
+    }
+    const revoke = target.closest('[data-revoke-person]');
+    if (revoke) {
+      if (!confirm('Revocare questa passkey? I dispositivi che la usano verranno disconnessi.')) return true;
+      try {
+        await consoleApi(`/people/${encodeURIComponent(id)}/passkeys/${encodeURIComponent(revoke.dataset.revokePerson)}/revoke`, { method: 'POST', body: {} });
+        await render();
+      } catch (error) { if (!error.handled) alert(error.message); }
+      return true;
+    }
+    if (target.closest('[data-person-sign-out]')) {
+      try {
+        await consoleApi(`/people/${encodeURIComponent(id)}/sign-out`, { method: 'POST', body: {} });
+        await render();
+      } catch (error) { if (!error.handled) alert(error.message); }
+      return true;
+    }
+  }
+  const copy = target.closest('[data-copy]');
+  if (copy) {
+    try { await navigator.clipboard.writeText(copy.dataset.copy); copy.textContent = 'Copiato'; } catch { /* the link is on screen */ }
+    return true;
+  }
+  const share = target.closest('[data-share]');
+  if (share) {
+    try { await navigator.share({ title: 'Accesso Staff', url: share.dataset.share }); } catch { /* cancelled */ }
+    return true;
+  }
+  return false;
+}
+
+document.addEventListener('change', (event) => {
+  // The manual form offers the rooms of the house it is for.
+  const source = event.target.closest('[data-room-source]');
+  if (source) {
+    const rooms = source.form?.querySelector('[data-rooms]');
+    if (rooms) rooms.innerHTML = roomOptions(source.value);
+  }
+});
+
+function bootConsole() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/console-sw.js', { scope: '/' }).catch(() => {});
+  }
+  const invite = new URLSearchParams(location.hash.slice(1)).get('invito');
+  if (invite) { acceptInvite(invite).catch(() => showSignIn()); return; }
+  const wanted = new URLSearchParams(location.search).get('struttura') ?? '';
+  if (wanted) history.replaceState(null, '', `/${location.hash}`);
+  enterConsole(wanted).catch((error) => { if (!error.handled) showSignIn(); });
 }
 
 /* ── Boot ──────────────────────────────────────────────────────────────── */
@@ -1401,7 +2066,9 @@ async function start() {
  * only appears when the server actually asks for one. Trying first and asking second
  * keeps the preview usable without pretending the production server is open.
  */
-if (!state.token) {
+if (CONSOLE) {
+  bootConsole();
+} else if (!state.token) {
   api('/dashboard').then(start).catch((error) => { if (!error.handled) showGate(''); });
 } else {
   start();

@@ -71,7 +71,12 @@ export function consoleConfig(env = process.env) {
       subject: String(env.CONSOLE_VAPID_SUBJECT ?? 'mailto:staff@invalid.example'),
     },
     /** How long a phone stays signed in, and how fresh a passkey check must be for money. */
-    session: { absoluteHours: 14 * 24, idleHours: 72, stepUpMinutes: 5 },
+    session: {
+      absoluteHours: 14 * 24,
+      idleHours: 72,
+      // Five minutes; lowered only by the browser QA, to see the passkey check asked.
+      stepUpMinutes: Math.max(0.05, Number(env.CONSOLE_STEP_UP_MINUTES ?? 5)),
+    },
     upstreamTimeoutMs: Number(env.CONSOLE_UPSTREAM_TIMEOUT_MS ?? 10000),
     /** Behind Render's proxy the client is the first X-Forwarded-For address (rate limits only). */
     trustProxy: Boolean(env.RENDER) || bool(env.CONSOLE_TRUST_PROXY),

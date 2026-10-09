@@ -399,8 +399,8 @@ export async function createConsoleApp({ config, store, fetchImpl, pushTransport
       background_color: '#16140f',
       theme_color: '#16140f',
       icons: [
-        { src: '/assets/icon-192.png', sizes: '192x192', type: 'image/png' },
-        { src: '/assets/icon-512.png', sizes: '512x512', type: 'image/png' },
+        { src: '/assets/icon-console-192.png', sizes: '192x192', type: 'image/png' },
+        { src: '/assets/icon-console-512.png', sizes: '512x512', type: 'image/png' },
       ],
     }, { 'content-type': 'application/manifest+json', ...SECURITY_HEADERS });
   }

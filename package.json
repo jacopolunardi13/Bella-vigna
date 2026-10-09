@@ -16,7 +16,10 @@
     "qa:reservations": "node tools/qa-reservations.mjs",
     "preview:shots": "node tools/preview-shots.mjs",
     "qa:shots": "node tools/guest-shots.mjs",
-    "qa:pass": "node tools/qa-pass.mjs"
+    "qa:pass": "node tools/qa-pass.mjs",
+    "console": "node server/console/index.js",
+    "console:local": "node tools/console-local.mjs",
+    "qa:console": "node tools/qa-console.mjs"
   },
   "engines": {
     "node": ">=20"

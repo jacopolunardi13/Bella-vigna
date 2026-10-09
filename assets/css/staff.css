@@ -332,3 +332,82 @@ code, .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-
 .row[data-provisional] { border-left: 2px solid var(--staff-warn); padding-left: 12px; }
 .row__meta--warn { color: var(--staff-warn); }
 .note--warn { color: var(--staff-warn); }
+
+/* ── The Staff console: several houses in one app ──────────────────────── */
+
+/**
+ * Which house a record belongs to, on every row of the console.
+ *
+ * Two colours that read apart at a glance on the dark ground, and the name in
+ * full: colour alone is not a label (and not everyone tells these two apart).
+ */
+.pill--house { font-weight: 600; letter-spacing: .02em; }
+.pill--house[data-house="lunart"] { color: #8fb8e8; border-color: color-mix(in srgb, #8fb8e8 55%, transparent); }
+.pill--house[data-house="bella-vigna"] { color: #d9b46a; border-color: color-mix(in srgb, #d9b46a 55%, transparent); }
+
+/* Tutte | LunArt | Bella Vigna: what every screen below shows. */
+.scope {
+  display: flex;
+  gap: 6px;
+  padding: 10px var(--staff-gutter) 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.scope::-webkit-scrollbar { display: none; }
+.scope__chip {
+  flex: 0 0 auto;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--staff-rule);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--staff-quiet);
+  font: inherit;
+  font-size: .86rem;
+}
+.scope__chip[aria-pressed="true"] { color: var(--staff-accent); border-color: var(--staff-accent); font-weight: 600; }
+.scope__chip[data-house="lunart"][aria-pressed="true"] { color: #8fb8e8; border-color: #8fb8e8; }
+.scope__chip[data-house="bella-vigna"][aria-pressed="true"] { color: #d9b46a; border-color: #d9b46a; }
+
+/* The house a one-house screen (Sincronizzazione) is showing. */
+.focus { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+
+/* A passkey question asked in the page: its button is the tap the phone needs. */
+.sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: end center;
+  padding: var(--staff-gutter);
+  padding-bottom: calc(var(--staff-gutter) + env(safe-area-inset-bottom));
+  background: rgba(10, 9, 6, .72);
+}
+.sheet__panel {
+  width: 100%;
+  max-width: 26rem;
+  padding: 20px;
+  background: var(--staff-raised);
+  border: 1px solid var(--staff-rule);
+  border-radius: var(--staff-radius);
+}
+.sheet__panel h2 { margin-top: 0; }
+.sheet__panel p { color: var(--staff-quiet); margin: 0 0 14px; }
+.sheet .action { width: 100%; justify-content: center; }
+.sheet__note { color: var(--staff-bad); font-size: .86rem; }
+
+.gate__more { margin-top: 18px; font-size: .86rem; }
+.gate__more summary { color: var(--staff-quiet); cursor: pointer; }
+.gate__more .field { margin-top: 12px; }
+
+.link-out {
+  margin-top: 10px;
+  padding: 10px;
+  border: 1px dashed var(--staff-rule);
+  border-radius: 10px;
+  word-break: break-all;
+}
+
+.log { margin: 0; padding: 0; list-style: none; }
+.log li { padding: 8px 0; border-bottom: 1px solid var(--staff-rule); font-size: .84rem; color: var(--staff-quiet); }
+.log li strong { color: var(--staff-ink); font-weight: 600; }

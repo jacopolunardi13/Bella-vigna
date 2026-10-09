@@ -51,6 +51,16 @@ export function fakeLunart({ token = SECRETS.lunartService, claim = null } = {})
       send(200, { ...extra, counts: { new: 2 }, orders: [{ id: 'o-l1', queue: 'new', status: 'paid', amount: 4900, currency: 'EUR', lines: [{ title: 'Breakfast', amount: 4900 }], customer: { name: 'Anna Rossi', room: '303' }, fulfilment_status: 'requested' }] });
       return;
     }
+    if (url.pathname === '/api/staff/sync') {
+      send(200, {
+        ...extra,
+        mailbox: { implemented: true, configured: true, id: 'gmail' }, mail: { implemented: true, configured: true, provider: 'gmail' },
+        push: { implemented: true, configured: true, transport: 'web-push' }, calendar: { implemented: true, configured: false },
+        jobs: {}, schedule: [], ical: { configured: false }, alerts: [],
+        counts: { reservations: 12, needs_review: 0, scheduled: 3, sent: 9 }, rows: [],
+      });
+      return;
+    }
     if (url.pathname === '/api/staff/reservations') {
       send(200, { ...extra, groups: { 'in-house': [] }, order: ['in-house'] });
       return;
