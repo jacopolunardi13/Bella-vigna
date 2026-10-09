@@ -1,11 +1,15 @@
 /**
- * Sending the guide email from LunArt's own address.
+ * Sending the guide email from the property's own address.
  *
  * Gmail's API rather than SMTP, for one reason: the credentials already exist for
  * reading the mailbox, so sending costs one more scope instead of a second account
- * and an app password. The message leaves from `lunartfirenze@gmail.com` and lands
- * in the guest's inbox with LunArt's own name on it, which matters when the
- * alternative is a transactional sender nobody recognises.
+ * and an app password. The message leaves from `MAIL_FROM` and lands in the guest's
+ * inbox with the property's own name on it (`brand.mail.fromName`), which matters
+ * when the alternative is a transactional sender nobody recognises.
+ *
+ * There is no default sender. A property whose sending address has not been
+ * decided has no business guessing one, so without `MAIL_FROM` this transport
+ * reports itself unconfigured and every guide email stays simulated.
  *
  * The message itself is built here as RFC 5322 rather than handed to a library:
  * it is one multipart/alternative with a text part and an HTML part, and the whole
@@ -17,6 +21,7 @@
  */
 
 import { createOauthClient, GoogleError } from '../google.js';
+import { brand } from '../../data/brand.js';
 
 const API = 'https://gmail.googleapis.com/gmail/v1/users/me/messages/send';
 
@@ -41,8 +46,8 @@ const chunk = (value) => (value.match(/.{1,76}/g) ?? []).join('\r\n');
  * Exported on its own so the construction can be read and tested without sending
  * anything — which is also how the simulated mailer shows a body to staff.
  */
-export function buildMimeMessage({ to, from, fromName = 'LunArt Firenze', subject, text, html, replyTo = '' }) {
-  const boundary = `lunart-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+export function buildMimeMessage({ to, from, fromName = brand.mail.fromName, subject, text, html, replyTo = '' }) {
+  const boundary = `${brand.storagePrefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
   const lines = [
     `From: ${addressOf(fromName, from)}`,
     `To: ${to}`,
@@ -80,7 +85,7 @@ export function buildMimeMessage({ to, from, fromName = 'LunArt Firenze', subjec
 export function createGmailMailer(settings = {}) {
   const {
     gmailClientId, gmailClientSecret, gmailRefreshToken,
-    mailFrom = 'lunartfirenze@gmail.com', mailReplyTo = '',
+    mailFrom = brand.mail.defaultFrom, mailReplyTo = '',
     fetchImpl = fetch,
   } = settings;
 
@@ -96,14 +101,15 @@ export function createGmailMailer(settings = {}) {
   return {
     id: 'gmail',
     implemented: true,
-    configured: client.configured,
+    /** Credentials and a sender: a token with nowhere to send from is not a mailer. */
+    configured: client.configured && Boolean(mailFrom),
     requires: ['GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET', 'GMAIL_REFRESH_TOKEN', 'MAIL_FROM'],
     scopes: [GMAIL_SEND_SCOPE],
     from: mailFrom,
     state: () => ({ ...state }),
 
     async send({ to, subject, text, html }) {
-      if (!client.configured) {
+      if (!client.configured || !mailFrom) {
         throw new GoogleError('gmail sender is not configured', { code: 'source-not-configured' });
       }
       const raw = buildMimeMessage({ to, from: mailFrom, subject, text, html, replyTo: mailReplyTo });

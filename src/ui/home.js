@@ -28,6 +28,7 @@ import {
   PHASES, getEntry, property, rooms, roomsCommon,
 } from '../../data/index.js';
 import { roomsIn, roomList } from '../../commerce/rooms.js';
+import { brand } from '../../data/brand.js';
 
 /**
  * Filled in by `src/commerce/boot.js` once the shop has loaded. Until then — and
@@ -94,9 +95,8 @@ function welcome(lang) {
   return `
     <section class="welcome" aria-labelledby="h-hero">
       <div class="welcome__frame${isPersonal() ? ' welcome__frame--compact' : ''}">
-        ${picture('views/arno-ponte-vecchio',
-    lang === 'it' ? 'L’Arno e Ponte Vecchio visti dalle finestre di LunArt'
-      : 'The Arno and Ponte Vecchio seen from the windows of LunArt',
+        ${picture(brand.hero,
+    brand.heroAlt[lang === 'en' ? 'en' : 'it'],
     { sizes: '(min-width: 760px) 720px, 100vw', eager: true })}
         <div class="welcome__caption">
           <p class="eyebrow">${esc(t(property.shortTagline, lang))}</p>

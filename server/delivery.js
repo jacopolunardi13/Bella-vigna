@@ -25,6 +25,7 @@
 import { propertyTimeToInstant, propertyDate, addDays } from '../commerce/time.js';
 import { isLive, roomPhrase } from './reservations.js';
 import { createGmailMailer } from './mail/gmail.js';
+import { brand, guideEmailCopy } from '../data/brand.js';
 
 export const DELIVERY_STATUS = {
   scheduled: 'scheduled',
@@ -202,32 +203,8 @@ export async function deliverGuideEmail({ store, mailer, origin, reservation, de
 
 /* ── The email itself ──────────────────────────────────────────────────── */
 
-const COPY = {
-  it: {
-    subject: 'La tua LunArt Guest Guide',
-    hello: (name) => (name ? `Ciao ${name},` : 'Ciao,'),
-    lead: 'ecco la tua guida personale per il soggiorno a LunArt: come entrare, il Wi-Fi, la colazione, il parcheggio e Firenze — tutto in una pagina, da aprire dal telefono.',
-    cta: 'Apri la tua LunArt Guest Guide',
-    stay: (from, to) => `Soggiorno: ${from} → ${to}`,
-    room: 'Camera',
-    rooms: 'Camere',
-    keep: 'Il link è personale: tienilo da parte, ti servirà anche durante il soggiorno.',
-    extras: 'Dalla guida puoi anche ordinare colazione in camera, vino, il transfer dall’aeroporto e il resto.',
-    signoff: 'A presto,\nLunArt — Vicolo del Canneto 2, Firenze',
-  },
-  en: {
-    subject: 'Your LunArt Guest Guide',
-    hello: (name) => (name ? `Hello ${name},` : 'Hello,'),
-    lead: 'here is your personal guide for your stay at LunArt: how to get in, the Wi-Fi, breakfast, parking and Florence — all on one page, made for your phone.',
-    cta: 'Open your LunArt Guest Guide',
-    stay: (from, to) => `Stay: ${from} → ${to}`,
-    room: 'Room',
-    rooms: 'Rooms',
-    keep: 'The link is personal: keep it, you will want it during the stay too.',
-    extras: 'From the guide you can also order breakfast in your room, wine, the airport transfer and the rest.',
-    signoff: 'See you soon,\nLunArt — Vicolo del Canneto 2, Florence',
-  },
-};
+/** The words live with the property: `data/brand.js`. */
+const COPY = guideEmailCopy;
 
 /** The personal link. Opaque token, nothing readable in it. */
 export const guideUrl = (origin, reservation) =>
@@ -266,7 +243,7 @@ export function renderGuideEmail({ reservation, origin = '', lang = 'it' }) {
   <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#faf9f7;padding:28px 16px">
     <tr><td align="center">
       <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:520px;background:#fff;border-radius:16px;padding:28px">
-        <tr><td style="font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#8a7f72">LunArt Firenze</td></tr>
+        <tr><td style="font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:#8a7f72">${esc(brand.longName)}</td></tr>
         <tr><td style="padding-top:14px;font-size:17px;line-height:1.6">${esc(copy.hello(reservation.first_name))}</td></tr>
         <tr><td style="padding-top:10px;font-size:15px;line-height:1.7">${esc(copy.lead)}</td></tr>
         <tr><td style="padding:22px 0">

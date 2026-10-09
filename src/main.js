@@ -24,8 +24,9 @@ import { loadBrandMark } from './ui/brand.js';
 import * as concierge from './concierge/ui.js';
 import { loadGuest, refreshGuest, tokenFromPath, guest, isPersonal } from './guest.js';
 import { PHASES, getEntry } from '../data/index.js';
+import { storageKey } from '../data/brand.js';
 
-const PHASE_KEY = 'lunart.phase';
+const PHASE_KEY = storageKey('phase');
 const VIEWS = { guide: homeView, florence: florenceView, help: helpView };
 const reviewMode = new URLSearchParams(location.search).get('review') === '1';
 

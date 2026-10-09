@@ -26,6 +26,7 @@ import { openCustomSheet } from '../../ui/sheet.js';
 import { stayBenefits, cardBenefits, partnerNetwork } from '../api.js';
 import { privilegeSection, stayBenefitsSection, networkSection } from './partners.js';
 import { longDate } from './format.js';
+import { brand } from '../../../data/brand.js';
 
 /**
  * The printed artwork, one file per tier.
@@ -49,16 +50,12 @@ import { longDate } from './format.js';
 /**
  * The mark drawn on the card.
  *
- * The same file the header uses — LunArt's own lock-up, traced from the artwork they
- * supplied. Referenced from here rather than hard-coded in the markup so the card and
+ * The same file the header uses — the property's own mark (`brand.mark`). Referenced from here rather than hard-coded in the markup so the card and
  * the header can never end up wearing two different marks.
  */
-export const PASS_MARK = 'assets/img/brand/lunart-wordmark.svg';
+export const PASS_MARK = brand.mark;
 
-export const PASS_ARTWORK = {
-  standard: 'assets/img/pass/lunart-pass',
-  privilege: 'assets/img/pass/lunart-pass-privilege',
-};
+export const PASS_ARTWORK = brand.passArtwork;
 
 /**
  * ── Why the path is in the stylesheet and not here ────────────────────────────
@@ -213,7 +210,7 @@ export function passFace(pass, lang, { size = 'preview' } = {}) {
         */''}
       <div class="pass__head">
         <p class="pass__holder">${esc(pass.holder || UI[lang].passTitle)}</p>
-        <img class="pass__mark" src="${esc(PASS_MARK)}" alt="LunArt" decoding="async" width="40" height="24">
+        <img class="pass__mark" src="${esc(PASS_MARK)}" alt="${esc(brand.name)}" decoding="async" width="40" height="24">
       </div>
       <div class="pass__foot">
         <div class="pass__detail">

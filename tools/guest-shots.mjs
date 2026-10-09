@@ -8,7 +8,7 @@
  * both languages, and leaves the files in tools/.qa-screens/.
  *
  * It needs a server with a demo reservation behind it:
- *   LUNART_PREVIEW=1 STAFF_TOKEN=x node server/index.js &
+ *   GUIDE_PREVIEW=1 STAFF_TOKEN=x node server/index.js &
  *   node tools/guest-shots.mjs
  *
  * Give it a personal link as an argument to shoot a particular stay; with none, it
@@ -45,7 +45,7 @@ async function personalLink() {
   const page = await (await fetch(`${BASE}/preview`)).text().catch(() => '');
   const match = /https?:\/\/[^"]*\/g\/[A-Za-z0-9_-]+/.exec(page);
   if (!match) {
-    throw new Error('No personal link found. Pass one as an argument, or run the server with LUNART_PREVIEW=1.');
+    throw new Error('No personal link found. Pass one as an argument, or run the server with GUIDE_PREVIEW=1.');
   }
   // The preview prints its own origin, which is not necessarily the one we asked.
   return match[0].replace(/^https?:\/\/[^/]+/, BASE);

@@ -14,6 +14,8 @@ import { facts, actions } from '../ui/components.js';
 import { ask } from './engine.js';
 import { INTENTS } from './intents.js';
 import { getEntry, OFFICIAL_WHATSAPP } from '../../data/index.js';
+import { whatsappHref } from '../../data/brand.js';
+import { privateFacts } from '../guest.js';
 
 let panel = null;
 let log = null;
@@ -38,7 +40,7 @@ function answerBubble(entry, lang) {
     <p class="bubble__title">${esc(t(entry.title, lang))}</p>
     <p>${esc(t(entry.summary, lang))}</p>
     ${entry.detail ? `<div class="prose" style="margin-top:8px">${paragraphs(t(entry.detail, lang))}</div>` : ''}
-    ${facts(entry.facts, lang)}
+    ${facts([...(entry.facts ?? []), ...privateFacts(entry)], lang)}
     ${actions(entry.actions, lang)}
   </div>`;
 }
@@ -70,7 +72,7 @@ function offer(intentIds, lang) {
 function handoff(lang) {
   return `<p>${esc(UI[lang].conciergeUnknown)}</p>
     <div class="actions">
-      <a class="action action--primary" href="https://wa.me/${OFFICIAL_WHATSAPP.replace(/\D/g, '')}"
+      <a class="action action--primary" href="${esc(whatsappHref(OFFICIAL_WHATSAPP, lang))}"
         target="_blank" rel="noopener">${icon('chat', 16)}${esc(UI[lang].writeToStaff)}</a>
     </div>`;
 }

@@ -18,6 +18,8 @@
  */
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
+import { brand } from '../../data/brand.js';
+import { ROOM_IDS } from '../../commerce/rooms.js';
 
 /**
  * @typedef {object} ReservationSourceAdapter
@@ -58,7 +60,7 @@ export function createQuovaiApiAdapter(settings = {}) {
       'If webhooks: what signs them, and over what — the raw body, or a canonical string?',
       'Which field is the stable booking identifier across a modification?',
       'Is the OTA guest email supplied in full, including the @guest.booking.com alias?',
-      'Is the room/unit identified by LunArt’s own numbering (301–305) or by a QuoVai id?',
+      `Is the room/unit identified by ${brand.name}’s own room ids (${ROOM_IDS.join(', ')}) or by a QuoVai id?`,
     ],
 
     /**

@@ -16,6 +16,7 @@ import {
   getEntry, getPlace, entriesInSection, contacts, emergency,
   itineraries, dayTrips, verifyList, unverifiedContacts,
 } from '../../data/index.js';
+import { whatsappHref } from '../../data/brand.js';
 
 export function florenceView(lang) {
   const blocks = entriesInSection('florence').map((entry) => {
@@ -63,7 +64,7 @@ export function helpView(lang) {
    */
   const people = contacts.map((contact) => {
     const channel = contact.whatsapp
-      ? { href: `https://wa.me/${contact.whatsapp.replace(/\D/g, '')}`, label: UI[lang].writeToStaff, icon: 'chat', external: true }
+      ? { href: whatsappHref(contact.whatsapp, lang), label: UI[lang].writeToStaff, icon: 'chat', external: true }
       : contact.phone
         ? { href: `tel:${contact.phone}`, label: UI[lang].callStaff, icon: 'phone', external: false }
         : { href: `mailto:${contact.email}`, label: UI[lang].emailStaff, icon: 'mail', external: false };

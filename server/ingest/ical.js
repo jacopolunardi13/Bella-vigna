@@ -35,8 +35,9 @@
 
 import { isValidDate, addDays, propertyDate } from '../../commerce/time.js';
 import { isLive, buildReservation, incompleteFields, RESERVATION_SOURCES } from '../reservations.js';
-import { roomsIn } from '../../commerce/rooms.js';
+import { roomsIn, ROOM_IN_TEXT, ROOM_TOKEN, roomIdFor } from '../../commerce/rooms.js';
 import { raiseAlert } from './index.js';
+import { brand } from '../../data/brand.js';
 
 /** Unfold the continuation lines iCal wraps long values onto. */
 function unfold(text) {
@@ -134,7 +135,11 @@ function referenceIn(text) {
   return bare ? bare[1] : '';
 }
 
-const roomIn = (text) => (/\b(30[1-6])\b/.exec(text)?.[1] ?? '');
+/** The first room the property's registry recognises in a summary, or nothing. */
+const roomIn = (text) => {
+  const match = ROOM_IN_TEXT.exec(String(text ?? ''));
+  return match ? (roomIdFor(match[1]) ?? '') : '';
+};
 
 /**
  * What a feed actually carries.
@@ -499,7 +504,7 @@ export async function reconcileFeeds({
         kind: 'reservation-not-in-calendar',
         severity: 'info',
         detail: {
-          message: 'Prenotazione presente in LunArt ma non nel calendario del canale.',
+          message: `Prenotazione presente in ${brand.name} ma non nel calendario del canale.`,
           ...gap,
           feed: feed.url,
         },
@@ -538,6 +543,9 @@ async function defaultFetchText(url) {
   return response.text();
 }
 
+/** A room id (any of its registry spellings), a colon or equals sign, then the URL. */
+const FEED_ENTRY = new RegExp(`^(${ROOM_TOKEN})[:=](.+)$`, 'iu');
+
 /** `room:url,room:url` or just `url,url`, as the environment variable carries them. */
 export function parseFeedConfig(value = '') {
   return String(value)
@@ -545,8 +553,8 @@ export function parseFeedConfig(value = '') {
     .map((entry) => entry.trim())
     .filter(Boolean)
     .map((entry) => {
-      const match = /^(30[1-6])[:=](.+)$/.exec(entry);
-      return match ? { room: match[1], url: match[2] } : { room: '', url: entry };
+      const match = FEED_ENTRY.exec(entry);
+      return match ? { room: roomIdFor(match[1]), url: match[2] } : { room: '', url: entry };
     });
 }
 

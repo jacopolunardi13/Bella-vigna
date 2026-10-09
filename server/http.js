@@ -83,8 +83,40 @@ export function redirect(res, location) {
 }
 
 /** Serve a file from `root`, refusing anything that climbs out of it. */
+/**
+ * What the static half may never hand out, whatever URL asks for it.
+ *
+ * The site is served from the repository root, because the browser imports
+ * `data/`, `commerce/` and `src/` directly — there is no build step. That also put
+ * everything else in the root a URL away: the server's own source, the tests, the
+ * tooling, `.git`, an `.env` somebody left on a host, and the old marketing page
+ * in `legacy/` whose promises the Property Pack has since corrected. None of it is
+ * a secret today; all of it is a mistake waiting for the day one is. Dotfiles and
+ * these top-level folders answer 404, exactly like a path that does not exist.
+ */
+const PRIVATE_TOP = new Set(['server', 'test', 'tools', 'docs', 'node_modules', 'legacy']);
+const PRIVATE_FILES = new Set(['package.json', 'package-lock.json', 'render.yaml', 'README.md', 'AUDIT.md', 'GO-LIVE.md', 'CORE-DELTA.md']);
+
+export function isPrivatePath(pathname) {
+  let decoded;
+  try { decoded = decodeURIComponent(String(pathname ?? '')); } catch { return true; }
+  const parts = normalize(decoded).split(/[\\/]+/).filter(Boolean);
+  if (parts.length === 0) return false;
+  if (parts.some((part) => part.startsWith('.'))) return true;
+  if (PRIVATE_TOP.has(parts[0])) return true;
+  if (parts.length === 1 && PRIVATE_FILES.has(parts[0])) return true;
+  return false;
+}
+
 export async function serveStatic(req, res, root, pathname) {
-  let path = join(root, normalize(decodeURIComponent(pathname)));
+  if (isPrivatePath(pathname)) return false;
+  let path;
+  try {
+    path = join(root, normalize(decodeURIComponent(pathname)));
+  } catch {
+    sendText(res, 400, 'Bad request');
+    return true;
+  }
   if (!path.startsWith(root)) {
     sendText(res, 403, 'Forbidden');
     return true;

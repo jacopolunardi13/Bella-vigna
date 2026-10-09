@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>LunArt — Verifica card</title>
+<title>Bella Vigna — Verifica card</title>
 <meta name="robots" content="noindex">
 <meta name="theme-color" content="#1a1a1a">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -74,7 +74,7 @@
   <header class="masthead">
     <span class="masthead__mark">
       <span class="masthead__monogram" aria-hidden="true">LA</span>
-      <span class="masthead__word">LunArt<span class="masthead__city">Firenze</span></span>
+      <span class="masthead__word">Bella Vigna<span class="masthead__city">Firenze</span></span>
     </span>
     <span class="masthead__partner" id="partner-name">—</span>
   </header>
@@ -96,7 +96,7 @@
   </div>
 
   <form class="manual" id="manual" hidden>
-    <label class="field__label" for="code">Codice LunArt</label>
+    <label class="field__label" for="code">Codice Bella Vigna</label>
     <input id="code" name="code" inputmode="latin" autocapitalize="characters" autocomplete="off"
            spellcheck="false" placeholder="ABC123-XY4Z9" maxlength="16">
     <div class="actions" style="margin-top:12px">
@@ -149,14 +149,14 @@
      the shared page — still shows this venue's benefit rather than a list. */
   let partner = null;
   if (PARTNER_ID) {
-    try { localStorage.setItem('lunart.partner', PARTNER_ID); } catch { /* ignore */ }
+    try { localStorage.setItem('bellavigna.partner', PARTNER_ID); } catch { /* ignore */ }
     fetch(`/api/partners/${encodeURIComponent(PARTNER_ID)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((p) => {
         partner = p;
         if (p) {
           nameEl.textContent = p.partner;
-          document.title = `LunArt — ${p.partner}`;
+          document.title = `Bella Vigna — ${p.partner}`;
           const link = document.createElement('link');
           link.rel = 'manifest';
           link.href = `/partner/${encodeURIComponent(PARTNER_ID)}/manifest.webmanifest`;
@@ -178,7 +178,7 @@
       const venue = payload.partner ?? payload.benefits?.[0] ?? null;
       verdict.dataset.tone = 'good';
       headline.textContent = 'CARD VALID';
-      detail.textContent = 'LunArt Firenze';
+      detail.textContent = 'Bella Vigna Firenze';
       result.innerHTML = `
         <div class="holder">
           <p class="holder__name">${esc(card.holder)}</p>

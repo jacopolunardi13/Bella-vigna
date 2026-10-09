@@ -1,5 +1,5 @@
 /**
- * Which rooms LunArt has, and how to name more than one of them.
+ * Which rooms the property has, and how to name more than one of them.
  *
  * A booking is not always one room. Booking.com sells a group of seven adults the
  * whole floor, QuoVai sends one notification listing four rooms, and until this
@@ -13,15 +13,45 @@
  * sentence a guest reads on their phone and the sentence in the email they were
  * sent have to be the same sentence.
  *
- * The range is deliberately a closed list rather than "any three digits". LunArt
- * lets 301 to 305 and expects a 306; a notification carrying 307, a price of 302
- * euros or a booking number ending in 304 is not a room, and the one place that
- * decides is here. `data/rooms.js` is a different thing — what LunArt publishes
- * about each room, photographs and all — and it covers only the rooms that exist.
+ * The range is deliberately a closed list rather than "any three digits". At LunArt
+ * a notification carrying 307, a price of 302 euros or a booking number ending in
+ * 304 is not a room; at Bella Vigna "deluxe" in a guest's note is not a room
+ * either. The list is `roomRegistry` in `data/rooms.js` — ids and the spellings a
+ * channel may use for them — and the one place that decides is here. The rest of
+ * `data/rooms.js` is a different thing: what the property publishes about each
+ * room, photographs and all.
  */
 
-/** Every room id LunArt lets, or expects to let. */
-export const ROOM_IDS = ['301', '302', '303', '304', '305', '306'];
+import { roomRegistry } from '../data/rooms.js';
+
+/**
+ * Every room id this property lets, or expects to let, in the order a person lists
+ * them. Comes from `data/rooms.js`, because which rooms exist is a fact about the
+ * property and not about the code that reads a booking.
+ */
+export const ROOM_IDS = roomRegistry.map((room) => room.id);
+
+const escapeRe = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Every spelling that names a room, longest first so "doccia doppia" is tried
+ * before "doppia" would be. A room's own id is always one of its spellings.
+ */
+const SPELLINGS = roomRegistry
+  .flatMap((room) => [room.id, ...(room.aliases ?? [])].map((alias) => ({ id: room.id, alias: String(alias).toLowerCase() })))
+  .sort((a, b) => b.alias.length - a.alias.length);
+
+const BY_SPELLING = new Map(SPELLINGS.map(({ id, alias }) => [alias.replace(/\s+/g, ' '), id]));
+
+/**
+ * The pattern for one room token, without a group, for callers that need to put it
+ * inside a larger expression (the QuoVai table reader, the iCal feed reader).
+ * Spaces inside an alias match any run of whitespace.
+ */
+export const ROOM_TOKEN = `(?:${SPELLINGS.map(({ alias }) => escapeRe(alias).replace(/\s+/g, '\\s+')).join('|')})`;
+
+/** Word-bounded on letters and digits alike, so "1305", "3050" and "deluxes" are not rooms. */
+const BOUNDED = (flags) => new RegExp(`(?<![\\p{L}\\p{N}])(${ROOM_TOKEN})(?![\\p{L}\\p{N}])`, flags);
 
 /**
  * A room id inside a longer string.
@@ -31,17 +61,23 @@ export const ROOM_IDS = ['301', '302', '303', '304', '305', '306'];
  * store. Not global — each caller decides whether it wants one match or all of
  * them — and word-bounded, so "1305" and "3050" are not rooms.
  */
-export const ROOM_IN_TEXT = /\b(30[1-6])\b/;
+export const ROOM_IN_TEXT = BOUNDED('iu');
 
-/** True for exactly the strings LunArt uses as room numbers. */
+/** The canonical id for a matched spelling, or null when it is not a room at all. */
+export const roomIdFor = (token) => BY_SPELLING.get(String(token ?? '').trim().toLowerCase().replace(/\s+/g, ' ')) ?? null;
+
+/** True for exactly the strings this property uses as room ids. */
 export const isRoomId = (value) => ROOM_IDS.includes(String(value ?? '').trim());
+
+/** Registry order, which for numbered rooms is ascending. */
+const ORDER = new Map(ROOM_IDS.map((id, index) => [id, index]));
 
 /**
  * Read a room set out of whatever shape it arrives in.
  *
- * Takes an array, a single value, or a string, and answers with the LunArt rooms
- * in it: unique, valid, and in ascending order. The order is not cosmetic — it is
- * what makes two readings of the same booking compare equal, so a modification
+ * Takes an array, a single value, or a string, and answers with the property's
+ * rooms in it: unique, valid, and in registry order. The order is not cosmetic — it
+ * is what makes two readings of the same booking compare equal, so a modification
  * that lists the rooms in a different order is not mistaken for a change.
  *
  * This reads values that have already been extracted structurally — a parsed room
@@ -51,10 +87,23 @@ export const isRoomId = (value) => ROOM_IDS.includes(String(value ?? '').trim())
  */
 export function roomsOf(input) {
   const found = new Set();
+  const all = BOUNDED('giu');
   for (const entry of Array.isArray(input) ? input : [input]) {
-    for (const match of String(entry ?? '').matchAll(/\b(30[1-6])\b/g)) found.add(match[1]);
+    for (const match of String(entry ?? '').matchAll(all)) {
+      const id = roomIdFor(match[1]);
+      if (id) found.add(id);
+    }
   }
-  return [...found].sort();
+  return [...found].sort((a, b) => ORDER.get(a) - ORDER.get(b));
+}
+
+/**
+ * How a room is said aloud, which is its id unless the property gives it a
+ * different short name in a language ("Terrazza" / "Terrace").
+ */
+export function roomLabel(id, lang = 'it') {
+  const room = roomRegistry.find((r) => r.id === id);
+  return room?.label?.[lang === 'en' ? 'en' : 'it'] ?? id;
 }
 
 /** The conjunction, which is the only part of a list of numbers that has a language. */
@@ -68,7 +117,7 @@ const AND = { it: 'e', en: 'and' };
  * every caller can use this and let the singular case look after itself.
  */
 export function roomList(rooms, lang = 'it') {
-  const list = roomsOf(rooms);
+  const list = roomsOf(rooms).map((id) => roomLabel(id, lang));
   if (list.length === 0) return '';
   if (list.length === 1) return list[0];
   const and = AND[lang === 'en' ? 'en' : 'it'];

@@ -12,6 +12,7 @@ import { icon } from './icons.js';
 import { UI } from '../i18n.js';
 import { facts, actions, placeRow, hydrateSliders } from './components.js';
 import { getEntry, getPlace } from '../../data/index.js';
+import { privateFacts } from '../guest.js';
 
 let root = null;
 let scrim = null;
@@ -41,7 +42,7 @@ function body(entry, lang) {
   return `
     <p class="sheet__lead">${esc(t(entry.summary, lang))}</p>
     ${entry.detail ? `<div class="prose">${paragraphs(t(entry.detail, lang))}</div>` : ''}
-    ${facts(entry.facts, lang)}
+    ${facts([...(entry.facts ?? []), ...privateFacts(entry)], lang)}
     ${places.length ? `<ul style="margin-top:14px">${places.map((p) => placeRow(p, lang)).join('')}</ul>` : ''}
     ${actions(entry.actions, lang)}
   `;

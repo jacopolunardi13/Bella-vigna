@@ -1,7 +1,7 @@
 /**
  * A fortnight of invented availability, for the preview only.
  *
- * Loaded only when LUNART_DEV_PRICES is set, alongside the preview prices. It
+ * Loaded only when GUIDE_DEV_PRICES is set, alongside the preview prices. It
  * exists so the booking flow can be walked through and tested; it is not a
  * guess at anybody's real hours, and a production server never sees it.
  */

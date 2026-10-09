@@ -15,7 +15,7 @@
  * this origin, and it is cleared from here when a device is handed on.
  */
 
-const TOKEN_KEY = 'lunart.staff.token';
+const TOKEN_KEY = storageKey('staff.token');
 
 const state = {
   token: readToken(),
@@ -50,6 +50,7 @@ function writeToken(token) {
 }
 
 import { roomsIn, roomList } from '../../commerce/rooms.js';
+import { brand, storageKey } from '../../data/brand.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g,
   (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -327,7 +328,7 @@ function reservationRow(reservation) {
     </p>` : ''}
     <div class="row__fields">
       <div><span>Prenotazione</span><span class="mono">${esc(reservation.booking_reference || '—')}</span></div>
-      <div><span>Riferimento LunArt</span><span class="mono">${esc(reservation.staff_ref || '—')}</span></div>
+      <div><span>Riferimento ${esc(brand.name)}</span><span class="mono">${esc(reservation.staff_ref || '—')}</span></div>
       <div><span>Email</span><span>${esc(reservation.guest_email || '—')}</span></div>
       <div><span>Telefono</span><span>${esc(reservation.guest_phone || '—')}</span></div>
       <div><span>Email guida</span><span>${esc(label(reservation.guide_email_status))}${reservation.guide_email_sent_at ? ` · ${esc(stamp(reservation.guide_email_sent_at))}` : ''}</span></div>
@@ -796,7 +797,7 @@ async function renderSync() {
       Solo per il caso raro di un rimborso fatto su un account Stripe diverso, il cui
       webhook non arriva qui. <strong>Non chiama Stripe e non muove soldi</strong>:
       il rimborso è già avvenuto e verificato, e questo serve solo a farlo sapere a
-      LunArt. Segna l’ordine come rimborsato per l’intero importo e revoca la
+      ${esc(brand.name)}. Segna l’ordine come rimborsato per l’intero importo e revoca la
       Privilege Card che quell’ordine aveva emesso — il QR smette di funzionare e i
       vantaggi partner non valgono più. Lo storico resta. Si può rilanciare: la
       seconda volta non cambia niente.

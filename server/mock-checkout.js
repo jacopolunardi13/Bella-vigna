@@ -10,6 +10,8 @@
  * It collects no card details, because there is nothing to collect.
  */
 
+import { brand } from '../data/brand.js';
+
 const money = (amount, currency = 'EUR') =>
   new Intl.NumberFormat('it-IT', { style: 'currency', currency }).format((amount ?? 0) / 100);
 
@@ -31,7 +33,7 @@ export function renderMockCheckout({ session, order, escapeHtml: esc }) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Pagamento di prova — LunArt</title>
+<title>Pagamento di prova — ${esc(brand.name)}</title>
 <link rel="stylesheet" href="/assets/css/fonts.css">
 <link rel="stylesheet" href="/assets/css/app.css">
 <style>
@@ -65,7 +67,7 @@ export function renderMockCheckout({ session, order, escapeHtml: esc }) {
   </div>
 
   <div class="panel">
-    <p class="eyebrow">LunArt · ${esc(session.id)}</p>
+    <p class="eyebrow">${esc(brand.name)} · ${esc(session.id)}</p>
     <h1 class="serif" style="font-size:1.5rem;margin:6px 0 16px">Riepilogo</h1>
     <ul>${lines || '<li class="line">—</li>'}</ul>
     <div class="total">

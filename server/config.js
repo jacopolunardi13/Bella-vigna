@@ -13,7 +13,7 @@
  *    preview and useless in production — every restart invalidates every card — so
  *    production logs a loud warning and refuses to pretend otherwise.
  *
- * And one more, for the shared preview: `LUNART_PREVIEW` is a one-way switch into
+ * And one more, for the shared preview: `GUIDE_PREVIEW` is a one-way switch into
  * demonstration mode. It does not merely default things to safe values — it ignores
  * the dangerous ones outright. Paste a live Stripe key, a Gmail refresh token or a
  * calendar service account into a preview host by mistake and none of them is read.
@@ -23,6 +23,7 @@
 
 import { randomBytes } from 'node:crypto';
 import { parseFeedConfig } from './ingest/ical.js';
+import { PROPERTY_ID, brand } from '../data/brand.js';
 
 const bool = (value, fallback = false) => {
   if (value == null || value === '') return fallback;
@@ -38,7 +39,13 @@ const mode = env.NODE_ENV === 'production' ? 'production' : 'development';
  * Everything below reads `preview` rather than the environment directly wherever a
  * credential could do something irreversible.
  */
-const preview = bool(env.LUNART_PREVIEW, false);
+/*
+ * The variable names carry no property name on purpose: `LUNART_PREVIEW`,
+ * `LUNART_DATA_DIR` and `LUNART_DEV_PRICES` are LunArt's, and a Bella Vigna service
+ * configured by copying LunArt's environment must not quietly start reading
+ * LunArt's data directory. Those names are not read here at all.
+ */
+const preview = bool(env.GUIDE_PREVIEW, false);
 /** In preview, a credential is not merely unused — it is never read. */
 const unlessPreview = (value) => (preview ? '' : (value ?? ''));
 
@@ -51,6 +58,8 @@ if (!cardSigningKey) {
 
 export const config = {
   mode,
+  /** The tenant this deployment serves. See `data/brand.js` and `server/tenant.js`. */
+  propertyId: PROPERTY_ID,
   port: Number(env.PORT ?? 4173),
   /** Where the guide is reachable; used to build Stripe return URLs. */
   preview,
@@ -82,7 +91,7 @@ export const config = {
   /** Sell things whose price is a placeholder. Off unless explicitly enabled. */
   allowPlaceholderPrices: preview || bool(env.ALLOW_PLACEHOLDER_PRICES, false),
   /** Fill the unpriced products with obviously-fake values so the flow is walkable. */
-  useDevPrices: preview || bool(env.LUNART_DEV_PRICES, false),
+  useDevPrices: preview || bool(env.GUIDE_DEV_PRICES, false),
 
   cardSigningKey,
   ephemeralCardKey,
@@ -92,9 +101,20 @@ export const config = {
   cardCodeGrace: Number(env.CARD_CODE_GRACE ?? 1),
 
   /** Where the file-backed store writes. Empty keeps everything in memory. */
-  dataDir: env.LUNART_DATA_DIR ?? '',
+  dataDir: env.GUIDE_DATA_DIR ?? '',
 
   staffToken: env.STAFF_TOKEN ?? '',
+
+  /**
+   * The in-room Wi-Fi password, if the guide is to show it at all.
+   *
+   * Never in the repository, never in `data/`, never in a log: guests normally join
+   * by scanning the QR code in the room, and this exists only for the guest whose
+   * phone will not scan. It is handed to a personal guide link of a live stay and
+   * to nobody else — not to the public guide, not to a cancelled stay, not to a
+   * preview, which never reads it.
+   */
+  wifiPassword: unlessPreview(env.WIFI_PASSWORD),
 
   /* ── Reservations ──────────────────────────────────────────────────────── */
 
@@ -126,7 +146,8 @@ export const config = {
   // Nothing leaves a preview: the mailer stays the simulated one, which renders the
   // email and keeps the body.
   mailProvider: unlessPreview(env.MAIL_PROVIDER),
-  mailFrom: env.MAIL_FROM ?? 'lunartfirenze@gmail.com',
+  /** No default: the sending address is the property's to decide (see `data/brand.js`). */
+  mailFrom: env.MAIL_FROM ?? brand.mail.defaultFrom,
   mailReplyTo: env.MAIL_REPLY_TO ?? '',
   /** Zero turns the send loop off; the schedule is still written. */
   deliveryPollMinutes: Number(env.DELIVERY_POLL_MINUTES ?? 0),
@@ -154,7 +175,7 @@ export const config = {
 export function configWarnings() {
   const warnings = [];
   if (config.preview) {
-    warnings.push('LUNART_PREVIEW is on: demonstration mode. Payments are the built-in stand-in, no email leaves, no mailbox is read, no calendar is written, and any credentials in the environment are ignored.');
+    warnings.push('GUIDE_PREVIEW is on: demonstration mode. Payments are the built-in stand-in, no email leaves, no mailbox is read, no calendar is written, and any credentials in the environment are ignored.');
     if (!config.staffToken) {
       warnings.push('A preview without STAFF_TOKEN leaves the Staff app open to anyone with the URL. Set one.');
     }

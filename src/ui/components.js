@@ -7,6 +7,7 @@ import { esc, t, paragraphs } from './dom.js';
 import { icon } from './icons.js';
 import { UI } from '../i18n.js';
 import { SECTIONS, entriesInSection } from '../../data/index.js';
+import { whatsappHref } from '../../data/brand.js';
 
 /** Source photographs are 3:2; the attributes reserve the space before it loads. */
 const PHOTO_W = 1024;
@@ -57,7 +58,8 @@ export function action(item, lang, { primary = false } = {}) {
     case 'tel':
       return `<a class="${cls}" href="tel:${esc(item.value)}">${icon('phone', 16)}${label}</a>`;
     case 'whatsapp':
-      return `<a class="${cls}" href="https://wa.me/${esc(item.value.replace(/\D/g, ''))}"
+      // The line is shared with another property: the message opens naming this one.
+      return `<a class="${cls}" href="${esc(whatsappHref(item.value, lang))}"
          target="_blank" rel="noopener">${icon('chat', 16)}${label}</a>`;
     case 'mailto':
       return `<a class="${cls}" href="mailto:${esc(item.value)}">${icon('mail', 16)}${label}</a>`;

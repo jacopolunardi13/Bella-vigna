@@ -7,11 +7,17 @@
  * a demo that does not say what it is pretending about is a demo that gets
  * misremembered as a promise.
  *
- * It exists only when `LUNART_PREVIEW` is on, and only ever lists the invented
+ * It exists only when `GUIDE_PREVIEW` is on, and only ever lists the invented
  * reservations the preview seeds for itself.
  */
 
+import { brand } from '../data/brand.js';
+import { cardPartners, stayPartners } from '../commerce/partners.js';
+
 export function renderPreviewIndex({ origin, links = [], escapeHtml }) {
+  /** Only a partner with a real, agreed benefit has a scanner page. */
+  const scanners = [...stayPartners(), ...cardPartners()]
+    .filter((partner, index, all) => all.findIndex((p) => p.partner_id === partner.partner_id) === index);
   const esc = escapeHtml;
   const link = (href, label, note = '') => `
     <li class="entry">
@@ -24,7 +30,7 @@ export function renderPreviewIndex({ origin, links = [], escapeHtml }) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>LunArt — Anteprima</title>
+<title>${esc(brand.name)} — Anteprima</title>
 <meta name="robots" content="noindex, nofollow">
 <meta name="theme-color" content="#16140f">
 <link rel="icon" href="/assets/icon.svg" type="image/svg+xml">
@@ -94,10 +100,11 @@ export function renderPreviewIndex({ origin, links = [], escapeHtml }) {
 <body>
 <main>
   <span class="flag">Anteprima</span>
-  <h1>LunArt — Guest Guide v2</h1>
+  <h1>${esc(brand.guideName)}</h1>
   <p class="lead">
-    Server completo, dati inventati. Niente pagamenti veri, niente email agli ospiti,
-    nessuna casella letta, nessun calendario scritto.
+    Staging di ${esc(brand.longName)}. Server completo, prenotazioni inventate.
+    Niente pagamenti veri, niente email agli ospiti, nessuna casella letta,
+    nessun calendario scritto. Non è la produzione.
   </p>
 
   <h2>La guida</h2>
@@ -109,16 +116,19 @@ export function renderPreviewIndex({ origin, links = [], escapeHtml }) {
     `${entry.rooms > 1 ? 'Camere' : 'Camera'} ${entry.room} · ${entry.dates}`,
   )).join('')}
     ${link(`${origin}/recover`, 'Ho perso il link', 'Cognome + numero di prenotazione')}
+    ${link(`${origin}/?review=1`, 'Dati da confermare', 'Ogni informazione ancora da verificare, nel suo contesto. Gli ospiti non la vedono')}
   </ul>
 
   <h2>Lo staff</h2>
   <ul>
-    ${link(`${origin}/staff`, 'LunArt Staff', 'Chiede il token dell’anteprima la prima volta')}
+    ${link(`${origin}/staff`, brand.staffName, 'Chiede il token dell’anteprima la prima volta')}
   </ul>
 
   <h2>I locali</h2>
   <ul>
-    ${link(`${origin}/partner/opera-caffe`, 'Opera Caffè', 'La pagina che il locale tiene sulla Home')}
+    ${scanners.length > 0
+    ? scanners.map((partner) => link(`${origin}/partner/${partner.partner_id}`, partner.name, 'La pagina che il locale tiene sulla Home')).join('')
+    : `<li class="entry"><span class="entry__note">Nessun partner ha ancora un accordo confermato per ${esc(brand.name)}: la rete è visibile come “in attivazione”, nessun vantaggio è utilizzabile e nessun locale ha uno scanner.</span></li>`}
     ${link(`${origin}/validate-card`, 'Verifica card generica', 'Per un locale senza pagina propria')}
   </ul>
 
@@ -133,7 +143,7 @@ export function renderPreviewIndex({ origin, links = [], escapeHtml }) {
   </ul>
 
   <footer>
-    Ramo <code>fable/guest-guide-v2</code>. Il sito pubblico di LunArt non è toccato da questa anteprima.
+    Staging isolato di ${esc(brand.longName)} (<code>${esc(brand.id)}</code>). Il sito pubblico, la produzione e le altre strutture non sono toccati da questa anteprima.
   </footer>
 </main>
 </body>

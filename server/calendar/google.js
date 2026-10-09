@@ -24,6 +24,7 @@
 import { createServiceAccountClient, GoogleError } from '../google.js';
 import { serviceMinutes } from '../../commerce/schedule.js';
 import { propertyTimeToInstant, addDays } from '../../commerce/time.js';
+import { brand } from '../../data/brand.js';
 
 const API = 'https://www.googleapis.com/calendar/v3';
 export const CALENDAR_SCOPES = ['https://www.googleapis.com/auth/calendar'];
@@ -91,11 +92,11 @@ export function createGoogleCalendarAdapter(settings = {}) {
     scopes: CALENDAR_SCOPES,
     timeZone: PROPERTY_TIMEZONE,
     readCalendar,
-    writeCalendar: writeCalendar || 'LunArt Hair Bookings',
+    writeCalendar: writeCalendar || brand.calendarName,
     capabilities: ['free-busy', 'create-event', 'delete-event'],
     state: () => ({ ...state }),
     openQuestions: [
-      'Which Google account owns the calendar LunArt may read and write?',
+      `Which Google account owns the calendar ${brand.name} may read and write?`,
       'Is the provider willing to subscribe his Apple Calendar to it, or should we read his own calendar’s free/busy instead?',
       'What working hours and what notice does he want enforced, independently of the calendar?',
     ],
@@ -160,7 +161,7 @@ export function createGoogleCalendarAdapter(settings = {}) {
       const window = appointmentWindow(booking);
       const minutes = window?.minutes ?? serviceMinutes(booking.variantId);
       return {
-        summary: `LunArt · ${booking.serviceTitle ?? booking.variantId} · camera ${booking.room ?? '—'}`,
+        summary: `${brand.name} · ${booking.serviceTitle ?? booking.variantId} · camera ${booking.room ?? '—'}`,
         description: [
           booking.guestName ? `Ospite: ${booking.guestName}` : null,
           booking.phone ? `Telefono: ${booking.phone}` : null,
@@ -168,7 +169,7 @@ export function createGoogleCalendarAdapter(settings = {}) {
           booking.notes ? `Note: ${booking.notes}` : null,
           'Niente lavaggio: l’ospite arriva con i capelli già lavati dove serve.',
         ].filter(Boolean).join('\n'),
-        location: `LunArt · Vicolo del Canneto 2, Firenze · camera ${booking.room ?? '—'}`,
+        location: `${brand.name} · ${brand.addressLine.it} · camera ${booking.room ?? '—'}`,
         start: { dateTime: window ? window.start.toISOString() : null, timeZone: PROPERTY_TIMEZONE },
         end: { dateTime: window ? window.end.toISOString() : null, timeZone: PROPERTY_TIMEZONE },
         minutes,
@@ -176,7 +177,7 @@ export function createGoogleCalendarAdapter(settings = {}) {
          * Google's own de-duplication: the same order sent twice produces one event.
          * The id has to be base32hex-ish and at least five characters.
          */
-        id: booking.orderId ? `lunart${String(booking.orderId).replace(/[^a-v0-9]/gi, '').toLowerCase().slice(0, 40)}` : undefined,
+        id: booking.orderId ? `${brand.storagePrefix.replace(/[^a-v0-9]/g, '')}${String(booking.orderId).replace(/[^a-v0-9]/gi, '').toLowerCase().slice(0, 40)}` : undefined,
         reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 60 }] },
       };
     },

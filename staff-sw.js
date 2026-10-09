@@ -11,7 +11,7 @@
  * The other job is notifications: showing one, and taking the tap back into the app.
  */
 
-const CACHE = 'lunart-staff-v1';
+const CACHE = 'bellavigna-staff-v1';
 const SHELL = [
   '/staff',
   '/assets/css/staff.css',
@@ -54,11 +54,11 @@ self.addEventListener('fetch', (event) => {
 
 self.addEventListener('push', (event) => {
   let payload = {};
-  try { payload = event.data?.json() ?? {}; } catch { payload = { title: 'LunArt Staff', body: event.data?.text() ?? '' }; }
+  try { payload = event.data?.json() ?? {}; } catch { payload = { title: 'Bella Vigna Staff', body: event.data?.text() ?? '' }; }
 
-  event.waitUntil(self.registration.showNotification(payload.title ?? 'LunArt Staff', {
+  event.waitUntil(self.registration.showNotification(payload.title ?? 'Bella Vigna Staff', {
     body: payload.body ?? '',
-    tag: payload.tag ?? 'lunart',
+    tag: payload.tag ?? 'bella-vigna',
     renotify: true,
     icon: '/assets/icon-192.png',
     badge: '/assets/icon-192.png',

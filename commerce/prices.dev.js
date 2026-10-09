@@ -7,7 +7,7 @@
  * without anyone mistaking a test value for a decision. €1.00 is not a price for an
  * eight-day privilege card, and that is the point.
  *
- * Loaded only when LUNART_DEV_PRICES=1, which `npm run dev` and the tests set and
+ * Loaded only when GUIDE_DEV_PRICES=1, which `npm run dev` and the tests set and
  * a production server does not.
  */
 

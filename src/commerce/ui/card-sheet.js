@@ -22,8 +22,9 @@ import { PASS_MARK, cardStateText } from './pass.js';
 import { qrSvg } from '../qr.js';
 import { fetchCard, stayBenefits, cardBenefits } from '../api.js';
 import { partnerList } from './partners.js';
+import { brand, storageKey } from '../../../data/brand.js';
 
-const STORAGE_KEY = 'lunart.cards.v1';
+const STORAGE_KEY = storageKey('cards.v1');
 
 export function rememberedCards() {
   try {
@@ -73,7 +74,7 @@ function cardFace(card, lang) {
         <p class="privilege-card__holder">${esc(card.holder)}</p>
         <p class="privilege-card__guests">${esc(UI[lang].validForTwo)}</p>
       </div>
-      <img class="pass__mark" src="${esc(PASS_MARK)}" alt="LunArt" decoding="async" width="40" height="24">
+      <img class="pass__mark" src="${esc(PASS_MARK)}" alt="${esc(brand.name)}" decoding="async" width="40" height="24">
     </div>
     <div class="privilege-card__foot">
       <div class="privilege-card__detail">
@@ -173,7 +174,7 @@ export function cardBenefitsBlock(card, lang) {
  * and replaces this; the preview is not a code waiting for a date.
  */
 export const previewPayload = (reference) =>
-  `lunart:privilege:inactive:${String(reference ?? '').trim().toUpperCase()}`;
+  `${brand.storagePrefix}:privilege:inactive:${String(reference ?? '').trim().toUpperCase()}`;
 
 /**
  * The code, or the space where it will be.

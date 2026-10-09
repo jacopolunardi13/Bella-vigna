@@ -13,6 +13,8 @@ import { readFile } from 'node:fs/promises';
 
 import { config, configWarnings } from './config.js';
 import { createStore } from './store.js';
+import { brand } from '../data/brand.js';
+import { wifiFor } from './private-facts.js';
 import { createStripe, createMockStripe, verifyWebhookSignature } from './stripe.js';
 import {
   readJson, readRawBody, sendJson, sendHtml, sendText, redirect, serveStatic, matchRoute, escapeHtml,
@@ -71,7 +73,9 @@ const ROOT = new URL('..', import.meta.url).pathname;
 
 export async function createApp(overrides = {}) {
   const settings = { ...config, ...overrides };
-  const store = overrides.store ?? createStore({ dataDir: settings.dataDir });
+  const store = overrides.store ?? createStore({ dataDir: settings.dataDir, propertyId: settings.propertyId });
+  // Another property's store stops the app here, before anything is seeded or served.
+  if (store.verifyTenant) await store.verifyTenant();
 
   // Preview-only prices are applied here, once, so every later read — the server's
   // and, through /api/catalog, the browser's — sees exactly the same table.
@@ -381,11 +385,18 @@ export async function createApp(overrides = {}) {
         line_items: stripeLineItems(order, lang),
         customer_email: customer.email,
         client_reference_id: order.id,
-        metadata: { order_id: order.id },
+        /**
+         * Which property this money is for, on the session and on the payment.
+         *
+         * Two properties may end up on one Stripe account, and then each webhook
+         * endpoint receives the other's events. `handleStripeEvent` reads this tag
+         * and leaves anything that is not its own alone.
+         */
+        metadata: { order_id: order.id, property: settings.propertyId },
         payment_intent_data: {
           capture_method: manualCapture ? 'manual' : 'automatic',
-          metadata: { order_id: order.id },
-          description: `LunArt · ${order.lines.map((l) => l.title).join(', ')}`.slice(0, 200),
+          metadata: { order_id: order.id, property: settings.propertyId },
+          description: `${brand.name} · ${order.lines.map((l) => l.title).join(', ')}`.slice(0, 200),
         },
         /**
          * Back to the guide they came from, not to the generic one.
@@ -696,9 +707,9 @@ export async function createApp(overrides = {}) {
     if (!honoursCards(partner)) { sendText(res, 404, 'Not found'); return; }
     res.writeHead(200, { 'content-type': 'application/manifest+json; charset=utf-8', 'cache-control': 'no-cache' })
       .end(JSON.stringify({
-        name: `LunArt · ${partner.name}`,
+        name: `${brand.name} · ${partner.name}`,
         short_name: partner.name.slice(0, 12),
-        description: `Verifica le LunArt Privilege Card presso ${partner.name}.`,
+        description: `Verifica le ${brand.privilegeCardName} presso ${partner.name}.`,
         start_url: `/partner/${partner.partner_id}`,
         scope: `/partner/${partner.partner_id}`,
         display: 'standalone',
@@ -793,6 +804,11 @@ export async function createApp(overrides = {}) {
        * this particular browser happens to remember.
        */
       purchases: await purchasesForReservation({ store, reservation: resolved.reservation }),
+      /**
+       * The Wi-Fi password, for this guest's live stay only, and only when the
+       * operator has configured one. See `server/private-facts.js`.
+       */
+      wifi: wifiFor(resolved.reservation, { password: settings.wifiPassword }),
       cardOptions: variants.map((variant) => ({
         variantId: variant.id,
         days: variant.meta?.days ?? null,
@@ -1321,7 +1337,7 @@ export async function createApp(overrides = {}) {
   async function postStaffNotifyTest(req, res) {
     const result = await notifyStaff({
       store, push, event: 'reconciliation',
-      data: { key: 'test', message: 'Notifica di prova dalla LunArt Staff app' },
+      data: { key: 'test', message: `Notifica di prova dalla ${brand.staffName} app` },
     });
     sendJson(res, 200, result);
   }
@@ -1439,9 +1455,9 @@ export async function createApp(overrides = {}) {
   async function getStaffManifest(req, res) {
     res.writeHead(200, { 'content-type': 'application/manifest+json; charset=utf-8', 'cache-control': 'no-cache' })
       .end(JSON.stringify({
-        name: 'LunArt Staff',
-        short_name: 'LunArt Staff',
-        description: 'Ordini, prenotazioni e sincronizzazione per lo staff LunArt.',
+        name: brand.staffName,
+        short_name: brand.staffName,
+        description: `Ordini, prenotazioni e sincronizzazione per lo staff ${brand.name}.`,
         start_url: '/staff',
         scope: '/staff',
         display: 'standalone',
@@ -1530,7 +1546,7 @@ export async function createApp(overrides = {}) {
       lastError,
       lastSuccessAt,
       note: state === 'disabled-in-preview'
-        ? 'LUNART_PREVIEW is on: this is switched off and its credentials are not read.'
+        ? 'GUIDE_PREVIEW is on: this is switched off and its credentials are not read.'
         : note,
       ...extra,
     };
@@ -1627,7 +1643,7 @@ export async function createApp(overrides = {}) {
           requires: providerCalendar.requires,
           lastError: calendarState.lastError ?? null,
           lastSuccessAt: calendarState.lastSuccessAt ?? null,
-          note: providerCalendar.configured ? null : 'Appointments are kept by LunArt and not written to a calendar.',
+          note: providerCalendar.configured ? null : `Appointments are kept by ${brand.name} and not written to a calendar.`,
           extra: {
             id: providerCalendar.id,
             writeCalendar: providerCalendar.writeCalendar,
@@ -1830,6 +1846,19 @@ export async function handleStripeEvent(event, { store, stripe, settings, push =
   if (await store.events.seen(event.id)) return { deduplicated: true };
 
   const object = event.data?.object ?? {};
+  /**
+   * Another property's money is not ours to touch.
+   *
+   * An event tagged for a different property is acknowledged and remembered, so
+   * Stripe stops retrying it here, and nothing else happens: no lookup, no write.
+   * An untagged event still has to match one of this store's own orders by id,
+   * which a payment made through another property's deployment never does.
+   */
+  const tagged = object.metadata?.property;
+  if (tagged && settings?.propertyId && tagged !== settings.propertyId) {
+    await store.events.remember(event.id, { type: event.type, note: `other property: ${tagged}` });
+    return { ignored: true, reason: 'other-property' };
+  }
   let order = null;
 
   if (object.metadata?.order_id) order = await store.orders.get(object.metadata.order_id);

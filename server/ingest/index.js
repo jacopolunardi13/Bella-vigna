@@ -105,6 +105,17 @@ export async function ingestMessage({ store, message, now = new Date() }) {
   }
 
   const parsed = parseQuovaiEmail(message);
+  if (!parsed.ok && parsed.reason === 'other-property') {
+    // Somebody else's booking in this mailbox. Nothing is stored about the guest;
+    // staff are told once per message, because it means the mailbox query is wrong.
+    await raiseAlert({
+      store,
+      key: `other-property:${message.messageId ?? parsed.booking_reference ?? 'unknown'}`,
+      kind: 'other-property-notification',
+      detail: { reason: parsed.reason, property: parsed.property, subject: message.subject ?? '' },
+    });
+    return parsed;
+  }
   if (!parsed.ok) {
     await raiseAlert({
       store,

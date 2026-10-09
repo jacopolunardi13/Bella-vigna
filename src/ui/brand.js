@@ -21,7 +21,9 @@
  * header is already correct before this runs, and only improves if it succeeds.
  */
 
-export const BRAND_WORDMARK = 'assets/img/brand/lunart-wordmark.svg';
+import { brand } from '../../data/brand.js';
+
+export const BRAND_WORDMARK = brand.mark;
 
 /**
  * Swap the typographic wordmark for the artwork, if the artwork is there.
@@ -45,7 +47,7 @@ export function loadBrandMark(
       const mark = document.createElement('img');
       mark.className = 'header__logo';
       mark.src = src;
-      mark.alt = 'LunArt';
+      mark.alt = brand.name;
       mark.decoding = 'async';
       element.replaceChildren(mark);
       element.dataset.logo = 'true';

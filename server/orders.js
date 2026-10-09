@@ -15,6 +15,7 @@ import { priceCart, paymentModeFor, CURRENCY } from '../commerce/ordering.js';
 import { PAYMENT_STATUS, FULFILMENT_STATUS } from '../commerce/schema.js';
 import { buildCard, holderView } from './card.js';
 import { orderCancellation } from '../commerce/cancellation.js';
+import { brand } from '../data/brand.js';
 
 /** Money states a given state is allowed to move to. Anything else is a bug. */
 const ALLOWED_TRANSITIONS = {
@@ -241,7 +242,7 @@ async function recordAppointments(order, { store, providerCalendar }) {
     events: [...(order.events ?? []), {
       at: new Date().toISOString(),
       type: 'calendar-write',
-      note: written.every((w) => w.ok) ? 'scritto sul calendario' : 'calendario non collegato: appuntamento solo su LunArt',
+      note: written.every((w) => w.ok) ? 'scritto sul calendario' : `calendario non collegato: appuntamento solo su ${brand.name}`,
     }],
   });
 }

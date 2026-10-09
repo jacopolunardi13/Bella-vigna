@@ -15,6 +15,35 @@ import { mkdir, readFile, writeFile, rename } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { randomUUID, randomBytes } from 'node:crypto';
+import { PROPERTY_ID } from '../data/brand.js';
+
+/**
+ * A store that belongs to somebody else.
+ *
+ * Bella Vigna and LunArt run the same core as two deployments, each with its own
+ * disk. The one mistake that would mix their guests is a data directory pointed at
+ * the other property's store — a copied environment, a shared volume, a typo — and
+ * the code would happily read LunArt's reservations, issue Bella Vigna links for
+ * them, and write the result back over LunArt's file.
+ *
+ * So every store carries the id of the property it belongs to, in `meta`, and a
+ * store stamped with a different id is refused: nothing is read from it and
+ * nothing is ever written to it. A non-empty store with no stamp at all is
+ * refused too, because the only stores written without one are LunArt's own from
+ * before this existed. Refusing is loud on purpose: the server will not start.
+ */
+export class TenantMismatchError extends Error {
+  constructor(message, details = {}) {
+    super(message);
+    this.name = 'TenantMismatchError';
+    this.code = 'tenant-mismatch';
+    Object.assign(this, details);
+  }
+}
+
+/** The collections that hold anything a guest or an order owns. */
+const OWNED = ['orders', 'cards', 'reservations', 'deliveries', 'subscriptions', 'alerts'];
+const holdsData = (parsed) => OWNED.some((name) => Object.keys(parsed?.[name] ?? {}).length > 0);
 
 /** Short, unambiguous, no look-alike characters: no I, L, O, U. */
 const REF_ALPHABET = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
@@ -33,7 +62,9 @@ function collection(state, name) {
   return state[name];
 }
 
-const EMPTY = () => ({
+const EMPTY = (propertyId = '') => ({
+  /** Whose store this is. Checked on every load; see `TenantMismatchError`. */
+  meta: propertyId ? { property_id: propertyId } : {},
   orders: {}, cards: {}, events: {},
   /** Reservations are the spine the rest hangs from. See `server/reservations.js`. */
   reservations: {},
@@ -49,27 +80,47 @@ const EMPTY = () => ({
   sync_runs: {},
 });
 
-export function createStore({ dataDir = '' } = {}) {
+export function createStore({ dataDir = '', propertyId = PROPERTY_ID } = {}) {
   const file = dataDir ? join(dataDir, 'store.json') : '';
-  let state = EMPTY();
+  let state = EMPTY(propertyId);
   let writeChain = Promise.resolve();
   let loaded = !file;
+  /** Set when the file on disk belongs to another property. Nothing proceeds past it. */
+  let refused = null;
 
   async function load() {
+    if (refused) throw refused;
     if (loaded) return;
     loaded = true;
     if (!existsSync(file)) return;
+    let parsed;
     try {
-      state = { ...EMPTY(), ...JSON.parse(await readFile(file, 'utf8')) };
+      parsed = JSON.parse(await readFile(file, 'utf8'));
     } catch {
       // A corrupt store must not take the server down; it starts empty and says so.
+      // It is not overwritten until something is actually written.
       console.error(`[store] ${file} could not be read; starting empty`);
+      return;
     }
+    const owner = parsed?.meta?.property_id ?? '';
+    if (propertyId && owner && owner !== propertyId) {
+      refused = new TenantMismatchError(
+        `[store] ${file} belongs to "${owner}", not "${propertyId}". Refusing to read or write it.`,
+        { owner, expected: propertyId },
+      );
+    } else if (propertyId && !owner && holdsData(parsed)) {
+      refused = new TenantMismatchError(
+        `[store] ${file} holds data but carries no property stamp, so it cannot be shown to be "${propertyId}"'s. Refusing to read or write it.`,
+        { owner: null, expected: propertyId },
+      );
+    }
+    if (refused) throw refused;
+    state = { ...EMPTY(propertyId), ...parsed, meta: { ...(parsed.meta ?? {}), ...(propertyId ? { property_id: propertyId } : {}) } };
   }
 
   /** Serialise every write, and never leave a half-written file behind. */
   function persist() {
-    if (!file) return Promise.resolve();
+    if (!file || refused) return Promise.resolve();
     writeChain = writeChain.then(async () => {
       await mkdir(dataDir, { recursive: true });
       const temp = `${file}.${process.pid}.tmp`;
@@ -290,6 +341,16 @@ export function createStore({ dataDir = '' } = {}) {
         collection(state, 'events')[eventId] = { at: now(), ...meta };
         await persist();
       },
+    },
+
+    /**
+     * Open the store now and say whose it is. Boot calls this before listening, so
+     * a store that belongs to another property stops the server rather than the
+     * first guest request.
+     */
+    async verifyTenant() {
+      await load();
+      return { propertyId: state.meta?.property_id ?? null, file: file || null };
     },
 
     /** For tests and diagnostics. */

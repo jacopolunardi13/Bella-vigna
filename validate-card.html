@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Verifica Privilege Card — LunArt</title>
+<title>Verifica Privilege Card — Bella Vigna</title>
 <meta name="robots" content="noindex">
 <link rel="stylesheet" href="assets/css/fonts.css">
 <link rel="stylesheet" href="assets/css/app.css">
@@ -46,7 +46,7 @@
 <body>
 <main class="wrap">
   <header class="masthead">
-    <span class="masthead__mark">LunArt</span>
+    <span class="masthead__mark">Bella Vigna</span>
     <span class="eyebrow">Privilege Card</span>
   </header>
 
@@ -115,14 +115,14 @@
   /* If this phone has a partner page saved, the answer is scoped to that venue
      rather than listing every benefit. */
   const rememberedPartner = (() => {
-    try { return localStorage.getItem('lunart.partner') || undefined; } catch { return undefined; }
+    try { return localStorage.getItem('bellavigna.partner') || undefined; } catch { return undefined; }
   })();
 
   function show(payload) {
     if (payload?.valid) {
       verdict.dataset.tone = 'good';
       headline.textContent = 'CARD VALID';
-      detail.textContent = `LunArt Firenze · ${payload.card.holder}`;
+      detail.textContent = `Bella Vigna Firenze · ${payload.card.holder}`;
       result.innerHTML = `
         <div class="facts-list">
           <div class="fact"><span class="fact__label">Intestata a</span>

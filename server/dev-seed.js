@@ -7,23 +7,24 @@
  * path: the same parser, the same upsert, the same email scheduling. Nothing is
  * faked past the mailbox, which is the only part that does not exist yet.
  *
- * The names say what they are. Nothing here runs when `LUNART_DEV_PRICES` is off.
+ * The names say what they are. Nothing here runs when `GUIDE_DEV_PRICES` is off.
  */
 
 import { ingestMessages } from './ingest/index.js';
 import { guideUrl } from './delivery.js';
-import { roomsIn, roomList } from '../commerce/rooms.js';
+import { roomsIn, roomList, ROOM_IDS } from '../commerce/rooms.js';
+import { brand } from '../data/brand.js';
 import { propertyDate, addDays } from '../commerce/time.js';
 
 const notification = ({ kind, reference, first, last, email, room, from, to, adults, channel }) => ({
   from: 'QuoVai <no-reply@quovai.example>',
-  subject: `${kind === 'cancelled' ? '⛔ Cancellazione' : kind === 'modified' ? '🔄 Modifica' : '🔔 Prenotazione'} per LunArt`,
+  subject: `${kind === 'cancelled' ? '⛔ Cancellazione' : kind === 'modified' ? '🔄 Modifica' : '🔔 Prenotazione'} per ${brand.name}`,
   messageId: `<preview-${reference}-${kind}@quovai.example>`,
   body: [
     kind === 'cancelled' ? 'CANCELLED' : kind === 'modified' ? 'MODIFIED' : 'NEW',
     '',
     `Numero prenotazione: ${reference}`,
-    'Struttura: LunArt',
+    `Struttura: ${brand.longName}`,
     `Agenzia/Canale: ${channel}`,
     `Nome: ${first}`,
     `Cognome: ${last}`,
@@ -34,7 +35,7 @@ const notification = ({ kind, reference, first, last, email, room, from, to, adu
     'Bambini: 0',
     'Telefono: +39 000 000 0000',
     `E-Mail: ${email}`,
-    `Camera ${room} - Superior | Tariffa: anteprima`,
+    `Camera ${room} | Tariffa: anteprima`,
     `Data prenotazione: ${italian(propertyDate())}`,
   ].join('\n'),
 });
@@ -53,12 +54,12 @@ export async function seedPreview({ store, publicUrl }) {
     notification({
       kind: 'new', reference: 'PREVIEW-0001',
       first: 'Ospite', last: 'Anteprima', email: 'anteprima@example.invalid',
-      room: '303', from: today, to: addDays(today, 3), adults: 2, channel: 'Booking.com',
+      room: ROOM_IDS[0], from: today, to: addDays(today, 3), adults: 2, channel: 'Booking.com',
     }),
     notification({
       kind: 'new', reference: 'PREVIEW-0002',
       first: 'Prossimo', last: 'Arrivo', email: 'arrivo@example.invalid',
-      room: '305', from: addDays(today, 2), to: addDays(today, 6), adults: 2, channel: 'Expedia',
+      room: ROOM_IDS.at(-1), from: addDays(today, 2), to: addDays(today, 6), adults: 2, channel: 'Expedia',
     }),
   ];
 

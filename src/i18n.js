@@ -2,10 +2,14 @@
  * Language handling.
  *
  * Content strings live beside the content, in the data layer. Only interface
- * chrome — the words that are not facts about LunArt — lives here.
+ * chrome — the words that are not facts about the property — lives here. The
+ * property's own names come from `data/brand.js`.
  */
 
-const STORAGE_KEY = 'lunart.lang';
+import { brand, storageKey } from '../data/brand.js';
+
+const STORAGE_KEY = storageKey('lang');
+const B = brand;
 
 export const UI = {
   it: {
@@ -25,7 +29,7 @@ export const UI = {
     rooms: 'Le camere',
     comingSoon: 'Prossima apertura',
     noResults: 'Nessun risultato. Prova con un’altra parola, o chiedi al Concierge.',
-    conciergeSub: 'Risponde su LunArt e su Firenze',
+    conciergeSub: `Risponde su ${B.name} e su Firenze`,
     conciergeOpening: 'Buongiorno. Chiedimi pure: Wi-Fi, check-in, colazione, parcheggio, dove mangiare.',
     conciergeUnknown: 'Questa non la so, e preferisco non inventare. Scrivici su WhatsApp: ti risponde una persona.',
     conciergeChoice: 'Posso intenderla in due modi. Quale ti serve?',
@@ -51,7 +55,7 @@ export const UI = {
     onRequestBadge: 'Su richiesta',
     priceToComeBadge: 'Prezzo da definire',
     provisionalPrice: 'Prezzo provvisorio',
-    provisionalPriceNote: 'Questo prezzo non è ancora quello definitivo di LunArt: lo confermiamo prima di addebitare qualsiasi cosa.',
+    provisionalPriceNote: `Questo prezzo non è ancora quello definitivo di ${B.name}: lo confermiamo prima di addebitare qualsiasi cosa.`,
     comingSoonBody: 'Non è ancora acquistabile. Dillo al Concierge e ti avvisiamo quando apre.',
     onRequestBody: 'Si organizza parlando con noi: scrivici e torniamo da te con cosa è possibile.',
     noAppointments: 'Nessun orario disponibile al momento',
@@ -61,9 +65,9 @@ export const UI = {
     surcharge: 'Supplementi',
     noDatesInStay: 'Nessuna data disponibile nel tuo soggiorno',
     withinStayHint: 'La validità resta dentro le date del soggiorno, giorno di partenza compreso.',
-    includedWithStay: 'Incluso nel tuo soggiorno LunArt',
+    includedWithStay: `Incluso nel tuo soggiorno ${B.name}`,
     includedWithStayBlurb: 'Non serve acquistare nulla: basta dirlo.',
-    cardSection: 'LunArt Privilege Card',
+    cardSection: `${B.privilegeCardName}`,
     cardNoPartners: 'Al momento non ci sono locali con un vantaggio riservato alla card. Quello che è incluso nel soggiorno lo trovi qui sopra.',
     yourStay: 'Il tuo soggiorno',
     nights: 'notti',
@@ -143,7 +147,7 @@ export const UI = {
     cancelFailed: 'Non è stato possibile annullare adesso. Riprova, oppure scrivici su WhatsApp.',
     partlyRefunded: 'Rimborsato in parte',
     upToTwo: 'fino a 2 persone',
-    qrLabel: 'QR della tua LunArt Privilege Card',
+    qrLabel: `QR della tua ${B.privilegeCardName}`,
     showAtVenue: 'Mostra questo codice al locale.',
     validForTwo: 'Valida per 2 persone',
     viewPrivileges: 'I tuoi vantaggi',
@@ -160,9 +164,9 @@ export const UI = {
     primaryWifi: 'Wi-Fi',
     primaryBreakfast: 'Colazione',
     primaryHelp: 'Assistenza',
-    // ── LunArt Pass ───────────────────────────────────────────────────────
-    passTitle: 'La tua LunArt Pass',
-    privilegeTitle: 'La tua LunArt Privilege',
+    // ── The Pass ───────────────────────────────────────────────────────
+    passTitle: `La tua ${B.passName}`,
+    privilegeTitle: `La tua ${B.privilegeName}`,
     privilegeWord: 'Privilege',
     openCard: 'Mostra il codice al locale',
     openPass: 'Apri la tua Pass',
@@ -179,26 +183,26 @@ export const UI = {
      * `l'8 novembre` is right. Every Italian weekday begins with a consonant, so a
      * bare preposition in front of one is grammatical for every date there is.
      */
-    passNotePrivilegeSoon: 'Hai già LunArt Privilege. I vantaggi saranno disponibili da {date}.',
-    passNotePrivilegeOver: 'La tua LunArt Privilege era valida fino a {date}.',
+    passNotePrivilegeSoon: `Hai già ${B.privilegeName}. I vantaggi saranno disponibili da {date}.`,
+    passNotePrivilegeOver: `La tua ${B.privilegeName} era valida fino a {date}.`,
     cardBenefitsFrom: 'I vantaggi si attiveranno insieme alla tua Privilege Card, da {date}.',
     cardBenefitsEnded: 'I vantaggi di questa card erano validi fino a {date}.',
     // ── Vantaggi Privilege ────────────────────────────────────────────────
     privilegeBenefits: 'Vantaggi Privilege',
     /** Detta una volta per sezione, non su ogni vantaggio. */
-    privilegeBenefitsNote: 'Mostra la tua LunArt Privilege attiva per utilizzare questi vantaggi.',
-    privilegeBenefitsDiscover: 'Questi vantaggi si sbloccano con LunArt Privilege, l’upgrade della Pass che hai già.',
-    privilegeLocked: 'Disponibile con LunArt Privilege',
-    privilegeGet: 'Attiva LunArt Privilege',
+    privilegeBenefitsNote: `Mostra la tua ${B.privilegeName} attiva per utilizzare questi vantaggi.`,
+    privilegeBenefitsDiscover: `Questi vantaggi si sbloccano con ${B.privilegeName}, l’upgrade della Pass che hai già.`,
+    privilegeLocked: `Disponibile con ${B.privilegeName}`,
+    privilegeGet: `Attiva ${B.privilegeName}`,
     privilegeWhenActive: 'I vantaggi valgono mentre la tua Pass è attiva.',
     privilegeWhenCardActive: 'I vantaggi valgono mentre la tua Privilege Card è attiva.',
     directions: 'Indicazioni',
-    // ── La rete LunArt ────────────────────────────────────────────────────
-    partnerNetwork: 'La rete LunArt',
+    // ── The network ────────────────────────────────────────────────────
+    partnerNetwork: `${B.network.it}`,
     partnerNetworkBlurb: 'I locali e le attività con cui lavoriamo a Firenze.',
     /** The one rule between what works today and what is being set up. */
     partnerActivating: 'In attivazione',
-    partnerComingSoon: 'Il vantaggio LunArt è in attivazione.',
+    partnerComingSoon: `Il vantaggio ${B.name} è in attivazione.`,
     // ── La Privilege Card ─────────────────────────────────────────────────
     privilegeCard: 'La tua Privilege Card',
     openPrivilegeCard: 'Apri la card',
@@ -218,7 +222,7 @@ export const UI = {
     shop: 'Extra',
     extrasHomeBlurb: 'Scelti per il momento del tuo soggiorno. Il resto è negli Extra.',
     about: 'Dove sei',
-    footer: 'LunArt · Vicolo del Canneto 2, Firenze',
+    footer: `${B.name} · ${B.addressLine.it}`,
   },
   en: {
     skip: 'Skip to content',
@@ -237,7 +241,7 @@ export const UI = {
     rooms: 'The rooms',
     comingSoon: 'Opening soon',
     noResults: 'Nothing found. Try another word, or ask the Concierge.',
-    conciergeSub: 'Answers about LunArt and Florence',
+    conciergeSub: `Answers about ${B.name} and Florence`,
     conciergeOpening: 'Good morning. Ask me anything: Wi-Fi, check-in, breakfast, parking, where to eat.',
     conciergeUnknown: 'I don’t know this one, and I would rather not invent it. Message us on WhatsApp — a person will answer.',
     conciergeChoice: 'I can read that two ways. Which did you mean?',
@@ -263,7 +267,7 @@ export const UI = {
     onRequestBadge: 'On request',
     priceToComeBadge: 'Price to be set',
     provisionalPrice: 'Provisional price',
-    provisionalPriceNote: 'This is not LunArt’s final price yet: we confirm it before anything is charged.',
+    provisionalPriceNote: `This is not ${B.name}’s final price yet: we confirm it before anything is charged.`,
     comingSoonBody: 'Not on sale yet. Tell the Concierge and we will let you know when it opens.',
     onRequestBody: 'Arranged by talking to us: message us and we will come back with what is possible.',
     noAppointments: 'No times available at the moment',
@@ -273,9 +277,9 @@ export const UI = {
     surcharge: 'Extras',
     noDatesInStay: 'No dates available within your stay',
     withinStayHint: 'Validity stays inside your stay, including the day you leave.',
-    includedWithStay: 'Included with your LunArt stay',
+    includedWithStay: `Included with your ${B.name} stay`,
     includedWithStayBlurb: 'Nothing to buy: just say so.',
-    cardSection: 'LunArt Privilege Card',
+    cardSection: `${B.privilegeCardName}`,
     cardNoPartners: 'There are no venues with a benefit reserved for the card at the moment. What comes with your stay is listed above.',
     yourStay: 'Your stay',
     nights: 'nights',
@@ -355,7 +359,7 @@ export const UI = {
     cancelFailed: 'We could not cancel that just now. Try again, or message us on WhatsApp.',
     partlyRefunded: 'Partly refunded',
     upToTwo: 'up to 2 people',
-    qrLabel: 'The QR of your LunArt Privilege Card',
+    qrLabel: `The QR of your ${B.privilegeCardName}`,
     showAtVenue: 'Show this code at the venue.',
     validForTwo: 'Valid for 2 guests',
     viewPrivileges: 'Your privileges',
@@ -372,9 +376,9 @@ export const UI = {
     primaryWifi: 'Wi-Fi',
     primaryBreakfast: 'Breakfast',
     primaryHelp: 'Help',
-    // ── LunArt Pass ───────────────────────────────────────────────────────
-    passTitle: 'Your LunArt Pass',
-    privilegeTitle: 'Your LunArt Privilege',
+    // ── The Pass ───────────────────────────────────────────────────────
+    passTitle: `Your ${B.passName}`,
+    privilegeTitle: `Your ${B.privilegeName}`,
     privilegeWord: 'Privilege',
     openCard: 'Show the code at the venue',
     openPass: 'Open your Pass',
@@ -384,26 +388,26 @@ export const UI = {
     passNote: 'Included with your stay. Show it with your breakfast token: it counts while the Pass is active.',
     passNotePrivilege: 'Your Pass, with the Privilege benefits unlocked. Show it with your breakfast token.',
     /** Owned and not yet running. True before activation, where the line above is not. */
-    passNotePrivilegeSoon: 'You already have LunArt Privilege. Your benefits will be available from {date}.',
-    passNotePrivilegeOver: 'Your LunArt Privilege was valid until {date}.',
+    passNotePrivilegeSoon: `You already have ${B.privilegeName}. Your benefits will be available from {date}.`,
+    passNotePrivilegeOver: `Your ${B.privilegeName} was valid until {date}.`,
     cardBenefitsFrom: 'These benefits become available with your Privilege Card, from {date}.',
     cardBenefitsEnded: 'The benefits on this card were valid until {date}.',
     // ── Privilege benefits ────────────────────────────────────────────────
     privilegeBenefits: 'Privilege benefits',
     /** Said once per section, not on every benefit. */
-    privilegeBenefitsNote: 'Show your active LunArt Privilege to use these benefits.',
-    privilegeBenefitsDiscover: 'These benefits unlock with LunArt Privilege, the upgrade to the Pass you already have.',
-    privilegeLocked: 'Available with LunArt Privilege',
-    privilegeGet: 'Get LunArt Privilege',
+    privilegeBenefitsNote: `Show your active ${B.privilegeName} to use these benefits.`,
+    privilegeBenefitsDiscover: `These benefits unlock with ${B.privilegeName}, the upgrade to the Pass you already have.`,
+    privilegeLocked: `Available with ${B.privilegeName}`,
+    privilegeGet: `Get ${B.privilegeName}`,
     privilegeWhenActive: 'The benefits apply while your Pass is active.',
     privilegeWhenCardActive: 'The benefits apply while your Privilege Card is active.',
     directions: 'Directions',
-    // ── The LunArt network ────────────────────────────────────────────────
-    partnerNetwork: 'The LunArt network',
+    // ── The network ────────────────────────────────────────────────
+    partnerNetwork: `${B.network.en}`,
     partnerNetworkBlurb: 'The venues and shops we work with in Florence.',
     /** The one rule between what works today and what is being set up. */
     partnerActivating: 'Coming soon',
-    partnerComingSoon: 'The LunArt benefit is coming soon.',
+    partnerComingSoon: `The ${B.name} benefit is coming soon.`,
     // ── The Privilege Card ────────────────────────────────────────────────
     privilegeCard: 'Your Privilege Card',
     openPrivilegeCard: 'Open card',
@@ -423,7 +427,7 @@ export const UI = {
     shop: 'Extras',
     extrasHomeBlurb: 'Chosen for where you are in your stay. Everything else is in the Extras.',
     about: 'Where you are',
-    footer: 'LunArt · Vicolo del Canneto 2, Florence',
+    footer: `${B.name} · ${B.addressLine.en}`,
   },
 };
 

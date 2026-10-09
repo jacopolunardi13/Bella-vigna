@@ -39,7 +39,7 @@
  * is what retires a browser already holding the stale one.
  */
 
-const CACHE = 'lunart-guide-v3';
+const CACHE = 'bellavigna-guide-v1';
 
 /** How long a mutable asset may wait for the network before the cache answers. */
 const NETWORK_DEADLINE_MS = 3500;
@@ -53,12 +53,12 @@ const PRECACHE = [
   'assets/fonts/dm-sans.woff2',
   'assets/fonts/cormorant-garamond.woff2',
   'src/main.js',
-  'assets/img/views/arno-ponte-vecchio-700.webp',
+  'assets/img/property/terrazza-700.webp',
   'manifest.webmanifest',
 ];
 
 /**
- * Is this one of the files that changes when LunArt deploys?
+ * Is this one of the files that changes when the guide deploys?
  *
  * By destination where the browser says so, by extension where it does not — a
  * module imported by another module arrives with destination "script", a plain

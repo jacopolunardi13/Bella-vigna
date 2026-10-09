@@ -30,6 +30,7 @@ import { roomsIn } from '../commerce/rooms.js';
 import { stayBenefits, cardBenefits, ENTITLEMENTS } from '../commerce/partners.js';
 import { RESERVATION_STATUS } from './reservations.js';
 import { cardState } from './card.js';
+import { brand } from '../data/brand.js';
 
 /** The two tiers one Pass can be in. There is no third, and no second card. */
 export const PASS_TIER = {
@@ -148,7 +149,7 @@ export function passFor(reservation, { card = null, now = new Date() } = {}) {
   const nights = Math.max(0, stayDates(reservation).length - 1);
 
   return {
-    object: 'lunart_pass',
+    object: `${brand.storagePrefix}_pass`,
     tier: upgraded ? PASS_TIER.privilege : PASS_TIER.pass,
     state,
     /** True exactly when a paper voucher presented today is backed by this Pass. */

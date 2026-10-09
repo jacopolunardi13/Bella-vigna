@@ -14,9 +14,10 @@ import { openCustomSheet, replaceSheetBody } from '../../ui/sheet.js';
 import { money, shortDate, policyText, deadlineText } from './format.js';
 import { fetchOrder, cancelOrderLine } from '../api.js';
 import { guestPurchases } from '../../guest.js';
+import { storageKey } from '../../../data/brand.js';
 
-const STORAGE_KEY = 'lunart.orders.v1';
-const PENDING_KEY = 'lunart.checkout-pending.v1';
+const STORAGE_KEY = storageKey('orders.v1');
+const PENDING_KEY = storageKey('checkout-pending.v1');
 
 /**
  * Noted when a guest leaves for the payment page.

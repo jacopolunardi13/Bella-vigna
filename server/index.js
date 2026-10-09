@@ -11,12 +11,22 @@
 
 import { createApp } from './app.js';
 import { config, configWarnings } from './config.js';
+import { brand } from '../data/brand.js';
 
-const app = await createApp();
+// Whose data is on this disk is decided before a single request is answered:
+// `createApp` opens the store first and refuses one stamped for another property.
+let app;
+try {
+  app = await createApp();
+} catch (error) {
+  if (error?.code !== 'tenant-mismatch') throw error;
+  console.error(`\n  ${error.message}\n  ${brand.longName} will not start on another property's store.\n`);
+  process.exit(1);
+}
 
 app.listen(config.port);
 
-console.log(`\n  LunArt — Guest Guide & Commerce`);
+console.log(`\n  ${brand.longName} — Guest Guide & Commerce (${config.propertyId})`);
 console.log(`  ${config.publicUrl}`);
 console.log(`  payments: ${app.stripe.mode}${app.stripe.mode === 'mock' ? ' (no money moves)' : config.stripe.testMode ? ' (test keys)' : ' (LIVE KEYS)'}`);
 console.log(`  prices:   ${config.allowPlaceholderPrices ? 'placeholders allowed' : 'confirmed only'}${config.useDevPrices ? ' + preview fixtures' : ''}`);

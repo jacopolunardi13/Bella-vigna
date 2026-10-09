@@ -47,7 +47,7 @@ export const guestStay = () => (
 export const cardOptions = () => state.context?.cardOptions ?? [];
 
 /**
- * The LunArt Pass for this stay.
+ * The Pass for this stay.
  *
  * Comes with the context because every reservation has one — there is nothing to
  * fetch and nothing to buy. Null on the public guide, where there is no stay for a
@@ -63,6 +63,23 @@ export const guestPass = () => state.context?.pass ?? null;
  * that order, and a phone that has never seen this stay before knows nothing.
  */
 export const guestPurchases = () => state.context?.purchases ?? [];
+
+/**
+ * Facts the server hands to this guest only, appended to the entry that asks for
+ * them (`privateFact` in `data/entries/`). On the public guide, on a cancelled stay
+ * or outside the stay this is empty, and the entry reads as it always does.
+ */
+export function privateFacts(entry) {
+  if (entry?.privateFact === 'wifi-password' && state.context?.wifi?.password) {
+    return [{
+      label: { it: 'Password (se il QR non funziona)', en: 'Password (if the QR code will not scan)' },
+      value: state.context.wifi.password,
+      mono: true,
+      copy: true,
+    }];
+  }
+  return [];
+}
 
 /**
  * Pull the context again, after something has changed it.

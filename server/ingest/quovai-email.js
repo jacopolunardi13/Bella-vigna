@@ -24,7 +24,8 @@
 
 import { createHash } from 'node:crypto';
 
-import { roomsOf, roomFields } from '../../commerce/rooms.js';
+import { roomsOf, roomFields, ROOM_TOKEN, roomIdFor } from '../../commerce/rooms.js';
+import { brand } from '../../data/brand.js';
 
 /** What kind of notification this is. */
 export const QUOVAI_KINDS = { new: 'new', modified: 'modified', cancelled: 'cancelled' };
@@ -267,7 +268,7 @@ export function classifyQuovaiMessage({ subject = '', from = '', body = '', html
     return { relevant: true, kind: kindOf({ subject, body: text }) };
   }
 
-  if (!fromQuovai && !/\blunart\b/i.test(subject)) {
+  if (!fromQuovai && !brand.quovaiSubjectPattern.test(subject)) {
     return { relevant: false, reason: 'not-from-the-reservation-mailbox' };
   }
 
@@ -403,6 +404,16 @@ export const fingerprint = (parts) =>
  * defaulted into existence: a field that was not in the email is absent, and the
  * upsert leaves whatever we already hold alone.
  */
+/** Whether QuoVai's "Struttura" names this deployment's property. See `data/brand.js`. */
+export function isThisProperty(name) {
+  const bare = String(name ?? '').toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+  if (!bare) return false;
+  return brand.quovaiPropertyNames.some((known) => {
+    const target = String(known).toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+    return bare === target || ` ${bare} `.includes(` ${target} `);
+  });
+}
+
 export function parseQuovaiEmail({ subject = '', from = '', body = '', html = '', messageId = '', receivedAt = null } = {}) {
   const textBody = flatten(html || body);
   const kind = kindOf({ subject, body: textBody });
@@ -425,6 +436,19 @@ export function parseQuovaiEmail({ subject = '', from = '', body = '', html = ''
   }
 
   const property = get('property');
+  /**
+   * A notification for another property is not ours to read.
+   *
+   * QuoVai names the property on every notification ("Struttura: LUNART"). Bella
+   * Vigna and LunArt share an operator and may one day share a mailbox, and a
+   * LunArt booking ingested here would give a LunArt guest a Bella Vigna link,
+   * Pass and email. So a named property that is not this one stops the parse
+   * before a single guest field is read. A notification that names no property
+   * at all is still read, as it always was: the mailbox query is what scopes it.
+   */
+  if (property && !isThisProperty(property)) {
+    return { ok: false, reason: 'other-property', kind, booking_reference, property };
+  }
 
   let first_name = get('first_name');
   let last_name = get('last_name');
@@ -562,9 +586,19 @@ const ROOM_TABLE_MAX_LINES = 80;
  * typed into a request field is prose, and prose is the one place a number in this
  * range means something else.
  *
- * LunArt lets 301 to 305 with 306 expected; `commerce/rooms.js` is the one place
- * that decides what counts as a room id at all.
+ * Which strings are rooms is not decided here: `commerce/rooms.js` is the one place
+ * that decides what counts as a room id at all, from the property's registry.
  */
+/**
+ * The two row shapes above, built from the property's own room spellings
+ * (`commerce/rooms.js`) rather than from LunArt's 301–306, so a property whose
+ * rooms are called "Deluxe" is read by the same rules. A room token may not be
+ * followed by a letter, a digit, a dot or a comma: `302,00` is a price, and
+ * "Deluxes" is not a room.
+ */
+const LEADING_ROOM = new RegExp(`^\\s*\\|?\\s*(${ROOM_TOKEN})(?![\\p{L}\\d.,])(?:\\s|\\||$)`, 'iu');
+const LOOSE_ROOM = new RegExp(`^\\s*\\|?\\s*(${ROOM_TOKEN})(?![\\p{L}\\d.,])\\s+\\S`, 'iu');
+
 function roomsFromTable(textBody, labelled, { notes = '' } = {}) {
   // A labelled field, if QuoVai ever sends one. It may carry several.
   const fromLabel = roomsOf(labelled);
@@ -576,8 +610,8 @@ function roomsFromTable(textBody, labelled, { notes = '' } = {}) {
 
   /** A room at the head of a table row — and not a price, a quantity or a total. */
   const leadingRoom = (line) => {
-    const match = /^\s*\|?\s*(30[1-6])(?![\d.,])(?:\s|\||$)/.exec(line);
-    return match ? match[1] : null;
+    const match = LEADING_ROOM.exec(line);
+    return match ? roomIdFor(match[1]) : null;
   };
 
   const heading = lines.findIndex((line) => ROOM_TABLE_HEADERS.includes(bare(line)));
@@ -608,8 +642,8 @@ function roomsFromTable(textBody, labelled, { notes = '' } = {}) {
   const loose = new Set();
   for (const line of lines) {
     if (noteLines.has(line.trim())) continue;
-    const match = /^\s*\|?\s*(30[1-6])(?![\d.,])\s+\S/.exec(line);
-    if (match) loose.add(match[1]);
+    const match = LOOSE_ROOM.exec(line);
+    if (match) loose.add(roomIdFor(match[1]));
   }
   if (loose.size > 0) return roomsOf([...loose]);
 

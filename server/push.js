@@ -21,6 +21,8 @@
  * about: an order is paid whether or not a phone buzzed.
  */
 
+import { brand } from '../data/brand.js';
+
 const notifications = [];
 
 /** The events worth a buzz. The wording is the notification, so it lives here. */
@@ -80,11 +82,18 @@ export const PUSH_EVENTS = {
 export function buildNotification(event, data = {}) {
   const shape = PUSH_EVENTS[event];
   if (!shape) return null;
+  /**
+   * The property comes first. Diego answers for LunArt and Bella Vigna, and the
+   * same phone may hold both Staff apps: "Bella Vigna · Annullamento ospite" is a
+   * notification he can act on from the lock screen, a bare "Annullamento ospite"
+   * is a question about which house.
+   */
   return {
     event,
-    title: shape.title(data),
+    property: brand.id,
+    title: `${brand.name} · ${shape.title(data)}`,
     body: shape.body(data),
-    tag: shape.tag(data),
+    tag: `${brand.id}:${shape.tag(data)}`,
     url: data.url ?? '/staff',
     at: new Date().toISOString(),
   };

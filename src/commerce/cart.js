@@ -13,8 +13,9 @@
 
 import { guestStay } from '../guest.js';
 import { priceCart, getProduct, getVariant } from '../../commerce/ordering.js';
+import { storageKey } from '../../data/brand.js';
 
-const STORAGE_KEY = 'lunart.cart.v1';
+const STORAGE_KEY = storageKey('cart.v1');
 const listeners = new Set();
 
 let lines = load();

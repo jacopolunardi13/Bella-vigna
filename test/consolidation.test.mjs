@@ -442,7 +442,7 @@ test('every product renders in both languages, coming-soon ones included', async
 /**
  * The preview has to be a real server and an impossible accident.
  *
- * These check the second half: with `LUNART_PREVIEW` on, a credential in the
+ * These check the second half: with `GUIDE_PREVIEW` on, a credential in the
  * environment is not merely unused — it is never read. The whole value of a
  * shareable demo is that nobody can charge a card or email a guest from it.
  */
@@ -465,7 +465,7 @@ const withEnv = async (vars, run) => {
 
 test('preview mode refuses to read a credential, however it got there', async () => {
   await withEnv({
-    LUNART_PREVIEW: '1',
+    GUIDE_PREVIEW: '1',
     STRIPE_SECRET_KEY: 'sk_live_this_would_take_real_money',
     STRIPE_WEBHOOK_SECRET: 'whsec_real',
     MAIL_PROVIDER: 'gmail',
@@ -491,7 +491,7 @@ test('preview mode refuses to read a credential, however it got there', async ()
 
 test('outside preview mode the same environment is read normally', async () => {
   await withEnv({
-    LUNART_PREVIEW: '',
+    GUIDE_PREVIEW: '',
     STRIPE_SECRET_KEY: 'sk_test_ordinary',
     MAIL_PROVIDER: 'gmail',
     GMAIL_REFRESH_TOKEN: 'token',
@@ -504,20 +504,20 @@ test('outside preview mode the same environment is read normally', async () => {
 });
 
 test('a preview says so, and says it loudly if the Staff app is left open', async () => {
-  await withEnv({ LUNART_PREVIEW: '1', STAFF_TOKEN: '' }, ({ configWarnings }) => {
+  await withEnv({ GUIDE_PREVIEW: '1', STAFF_TOKEN: '' }, ({ configWarnings }) => {
     const warnings = configWarnings();
     assert.match(warnings[0], /demonstration mode/i);
     assert.ok(warnings.some((warning) => /STAFF_TOKEN/.test(warning)), 'and asks for a token');
   });
 
-  await withEnv({ LUNART_PREVIEW: '1', STAFF_TOKEN: 'a-long-generated-value' }, ({ configWarnings }) => {
+  await withEnv({ GUIDE_PREVIEW: '1', STAFF_TOKEN: 'a-long-generated-value' }, ({ configWarnings }) => {
     const warnings = configWarnings();
     assert.equal(warnings.length, 1, 'with a token, only the demonstration notice remains');
   });
 });
 
 test('the host tells the preview its own address', async () => {
-  await withEnv({ LUNART_PREVIEW: '1', PUBLIC_URL: '', RENDER_EXTERNAL_URL: 'https://lunart-preview.onrender.com/' },
+  await withEnv({ GUIDE_PREVIEW: '1', PUBLIC_URL: '', RENDER_EXTERNAL_URL: 'https://lunart-preview.onrender.com/' },
     ({ config }) => {
       assert.equal(config.publicUrl, 'https://lunart-preview.onrender.com', 'trailing slash trimmed');
     });
@@ -567,7 +567,7 @@ test('the preview front door lists the demo links, and only exists in a preview'
   assert.equal(health.payments, 'mock');
   for (const [name, integration] of Object.entries(health.integrations)) {
     assert.equal(integration.state, 'disabled-in-preview', `${name} is off by design`);
-    assert.match(integration.note, /LUNART_PREVIEW/);
+    assert.match(integration.note, /GUIDE_PREVIEW/);
   }
 
   // The seeded reservations are reachable through their own links.
