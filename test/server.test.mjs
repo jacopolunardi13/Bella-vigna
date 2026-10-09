@@ -4,6 +4,13 @@
  * A listening server, the mock payment provider, and an in-memory store — so these
  * exercise the routes, the webhook handling and the state machine exactly as a
  * browser and Stripe would, without an account and without money.
+ *
+ * The shared server below is configured as Bella Vigna's preview is: placeholder
+ * prices allowed, so LunArt's figures can be walked with test money. Bella
+ * Vigna's production state — nothing sellable until the operator confirms it —
+ * gets a server of its own further down. And the Privilege Card, which needs a
+ * venue behind it and has none at Bella Vigna yet, is bought only with the
+ * agreements confirmed for the length of the test (`test/support/property.mjs`).
  */
 
 import test, { before, after } from 'node:test';
@@ -17,6 +24,10 @@ import { createMockStripe, verifyWebhookSignature, formEncode } from '../server/
 import { DEV_PRICES } from '../commerce/prices.dev.js';
 import { applyPriceOverrides } from '../commerce/prices.js';
 import { propertyDate, addDays } from '../commerce/time.js';
+import { PRODUCTS } from '../commerce/catalog.js';
+import { isPurchasable } from '../commerce/index.js';
+import { cardPartners } from '../commerce/partners.js';
+import { confirmAllAgreements, restoreAgreements, confirmAllPrices } from './support/property.mjs';
 
 let server;
 let base;
@@ -55,9 +66,12 @@ const api = async (path, options = {}) => {
   return { status: response.status, body: await response.json().catch(() => ({})) };
 };
 
+/** A Bella Vigna room. */
+const ROOM = 'Deluxe';
+
 const wineLine = (over = {}) => ({
   productId: 'wine-in-room', variantId: 'brunello', quantity: 1,
-  date: soon(3), slotId: 'w-1900', room: '303', ...over,
+  date: soon(3), slotId: 'w-1900', room: ROOM, ...over,
 });
 
 const BRUNELLO = 8900;
@@ -72,7 +86,22 @@ const transferLine = () => ({
   },
 });
 
-const CUSTOMER = { name: 'Jacopo Lunardi', email: 'jacopo@example.com', room: '303' };
+const CUSTOMER = { name: 'Jacopo Lunardi', email: 'jacopo@example.com', room: ROOM };
+
+/**
+ * The Privilege Card needs a venue that reserves something for it, and at Bella
+ * Vigna none does until an agreement is confirmed. These tests are about what
+ * happens once one is, so the agreements are in force for their length and put
+ * back afterwards, pass or fail. The prices stay as this server has them.
+ */
+async function withAgreements(body) {
+  confirmAllAgreements();
+  try {
+    return await body();
+  } finally {
+    restoreAgreements();
+  }
+}
 
 async function buy(lines, { pay = true } = {}) {
   const { body: checkout } = await api('/api/checkout', { body: { lines, customer: CUSTOMER, lang: 'it' } });
@@ -88,10 +117,121 @@ test('the catalogue carries the amounts in force, and says how it is configured'
   assert.equal(status, 200);
   assert.ok(body.products.length >= 7);
   assert.equal(body.prices['transfer-airport'].amount, 9000);
-  assert.equal(body.prices['transfer-airport'].status, 'confirmed');
+  // LunArt's figure, published as what it is for Bella Vigna: unconfirmed.
+  assert.equal(body.prices['transfer-airport'].status, 'placeholder');
+  assert.match(body.prices['transfer-airport'].source, /LunArt/);
   assert.equal(body.allowPlaceholderPrices, true);
   assert.equal(body.paymentsMode, 'mock');
   assert.ok(body.partners.every((partner) => partner.active));
+
+  // This server allows placeholders, so the transfer is on sale. The Privilege
+  // upgrade is not: no venue reserves anything for it at Bella Vigna yet.
+  const product = (id) => body.products.find((entry) => entry.id === id);
+  assert.equal(product('transfer-airport').purchasable, true);
+  assert.equal(product('privilege-card').purchasable, false, 'no card partner, no card');
+  assert.deepEqual(body.cardBenefits, []);
+});
+
+/* ── Bella Vigna in production ───────────────────────────────────────────── */
+
+/**
+ * The same catalogue on a server configured the way production is.
+ *
+ * Every price is LunArt's and none is confirmed for Bella Vigna, so this server
+ * publishes the amounts and sells nothing — the guide renders the products and
+ * says the price is not confirmed. The moment the operator confirms the figures
+ * and the agreements, the same server sells them; that is the second half.
+ */
+async function productionServer() {
+  const production = await createApp({
+    store: createStore(),
+    stripe: createMockStripe(),
+    allowPlaceholderPrices: false,
+    useDevPrices: false,
+    seed: false,
+    cardSigningKey: 'server-production-key',
+    staffToken: 'production-token',
+    mode: 'production',
+    publicUrl: 'https://guide.example',
+  });
+  const listener = production.listen(0);
+  await new Promise((resolve) => listener.once('listening', resolve));
+  const url = `http://127.0.0.1:${listener.address().port}`;
+  const call = async (path, body) => {
+    const response = await fetch(`${url}${path}`, {
+      method: body ? 'POST' : 'GET',
+      headers: body ? { 'content-type': 'application/json' } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    return { status: response.status, body: await response.json().catch(() => ({})) };
+  };
+  return { production, call, close: () => listener.close() };
+}
+
+test('a production server publishes LunArt’s figures and sells none of them', async () => {
+  // This file's preview table is set aside, so the production server sees only
+  // what `commerce/prices.js` says.
+  applyPriceOverrides({});
+  const { production, call, close } = await productionServer();
+  try {
+    const { body } = await call('/api/catalog');
+    assert.equal(body.allowPlaceholderPrices, false);
+    assert.equal(body.prices['transfer-airport'].amount, 9000, 'the figure is shown');
+    assert.equal(body.prices['transfer-airport'].status, 'placeholder', 'and said to be unconfirmed');
+    assert.deepEqual(body.products.filter((product) => product.purchasable).map((product) => product.id), [],
+      'nothing is on sale');
+
+    resetRateLimits();
+    const refused = await call('/api/checkout', { lines: [wineLine()], customer: CUSTOMER, lang: 'it' });
+    assert.equal(refused.status, 422);
+    assert.equal(refused.body.error, 'cart-invalid');
+    assert.ok(refused.body.errors.some((e) => e.code === 'price-not-confirmed' && e.sku === 'wine:brunello'));
+    assert.deepEqual(await production.store.orders.list({}), [], 'and no order exists');
+  } finally {
+    close();
+    applyPriceOverrides(DEV_PRICES);
+  }
+});
+
+test('confirmed by the operator, the same production server sells them', async () => {
+  confirmAllAgreements();
+  confirmAllPrices();
+  const { production, call, close } = await productionServer();
+  try {
+    const { body } = await call('/api/catalog');
+    assert.equal(body.prices['transfer-airport'].status, 'confirmed');
+    const product = (id) => body.products.find((entry) => entry.id === id);
+    for (const id of ['wine-in-room', 'transfer-airport', 'privilege-card']) {
+      assert.equal(product(id).purchasable, true, id);
+    }
+
+    resetRateLimits();
+    const sold = await call('/api/checkout', { lines: [wineLine()], customer: CUSTOMER, lang: 'it' });
+    assert.equal(sold.status, 200, JSON.stringify(sold.body));
+    assert.equal(sold.body.amount, BRUNELLO);
+    assert.equal((await production.store.orders.list({})).length, 1);
+  } finally {
+    close();
+    restoreAgreements();
+    applyPriceOverrides(DEV_PRICES);
+  }
+});
+
+/**
+ * The catalogue withholds Privilege while no venue reserves anything for it, and
+ * the checkout refuses it for the same reason: the browser's opinion is a
+ * convenience, the server's is the decision. It used not to — `validateLine` never
+ * read `requiresPartners` — so a hand-written request bought a card on a server
+ * that allowed placeholders. Now refused before an order exists.
+ */
+test('the checkout refuses Privilege while no partner offers a card benefit', async () => {
+  assert.equal(cardPartners().length, 0);
+  assert.equal(isPurchasable(PRODUCTS.find((p) => p.id === 'privilege-card'), { allowPlaceholders: true }), false);
+  resetRateLimits();
+  const { status, body } = await api('/api/checkout', {
+    body: { lines: [{ productId: 'privilege-card', variantId: '2d', quantity: 1, date: propertyDate(), fields: { holderName: 'Ada Lovelace' } }], customer: CUSTOMER },
+  });
+  assert.equal(status, 422, JSON.stringify(body));
 });
 
 /* ── Server-side pricing ─────────────────────────────────────────────────── */
@@ -160,7 +300,7 @@ test('an unknown order token returns nothing at all', async () => {
 
 /* ── Entitlements ────────────────────────────────────────────────────────── */
 
-test('paying for a card issues exactly one card, once', async () => {
+test('paying for a card issues exactly one card, once', () => withAgreements(async () => {
   const order = await buy([{
     productId: 'privilege-card', variantId: '5d', quantity: 1,
     date: propertyDate(), fields: { holderName: 'Jacopo Lunardi' },
@@ -181,9 +321,9 @@ test('paying for a card issues exactly one card, once', async () => {
 
   const { body: again } = await api(`/api/orders/${order.accessToken}`);
   assert.equal(again.entitlements.length, 1, 'still exactly one card');
-});
+}));
 
-test('a card can be opened with its own token and gives a live code', async () => {
+test('a card can be opened with its own token and gives a live code', () => withAgreements(async () => {
   const order = await buy([{
     productId: 'privilege-card', variantId: '2d', quantity: 1,
     date: propertyDate(), fields: { holderName: 'Ada Lovelace' },
@@ -213,9 +353,33 @@ test('a card can be opened with its own token and gives a live code', async () =
     assert.equal(status, 200);
     assert.equal(again.valid, true);
   }
-});
+}));
 
-test('the card payload tells the browser nothing about how it is protected', async () => {
+test('at Bella Vigna today, no venue can validate a card', () => withAgreements(async () => {
+  // A card bought while the agreements were (as if) in force…
+  const order = await buy([{
+    productId: 'privilege-card', variantId: '2d', quantity: 1,
+    date: propertyDate(), fields: { holderName: 'Ada Lovelace' },
+  }]);
+  const { body: orderBody } = await api(`/api/orders/${order.accessToken}`);
+  const { body: card } = await api(`/api/card/${orderBody.entitlements[0].access_token}`);
+  const scanned = new URL(card.qr);
+  const reference = scanned.searchParams.get('c');
+  const code = scanned.searchParams.get('k');
+
+  // Back to Bella Vigna's own register: the agreement does not cover it yet.
+  assert.equal((await api('/api/partners/opera-caffe')).status, 200, 'with the agreement, the venue has a scanner');
+  restoreAgreements();
+  assert.equal((await api('/api/partners/opera-caffe')).status, 404, 'in attivazione, it has none');
+
+  // The card is still genuine and live, so it scans as such — but the venue is
+  // told of no benefit to give, because none is agreed for Bella Vigna guests.
+  const { body: scannedThere } = await api('/api/card/validate', { body: { reference, code, partner: 'opera-caffe' } });
+  assert.equal(scannedThere.valid, true, 'the card itself is not in question');
+  assert.equal(scannedThere.partner, null, 'a venue in attivazione is promised nothing');
+}));
+
+test('the card payload tells the browser nothing about how it is protected', () => withAgreements(async () => {
   const order = await buy([{
     productId: 'privilege-card', variantId: '2d', quantity: 1,
     date: propertyDate(), fields: { holderName: 'Grace Hopper' },
@@ -230,7 +394,7 @@ test('the card payload tells the browser nothing about how it is protected', asy
   }
   assert.ok(card.qr, 'it does carry the QR');
   assert.equal(typeof card.refreshIn, 'number', 'and when to quietly ask again');
-});
+}));
 
 /* ── Authorise, then capture or release ──────────────────────────────────── */
 
@@ -445,6 +609,12 @@ test('checkout sessions are built from server amounts, never a Payment Link', as
   assert.equal(params.line_items[0].price_data.currency, 'eur');
   assert.equal(params.payment_intent_data.capture_method, 'manual');
   assert.ok(params.metadata.order_id, 'the order travels with the session');
+  // And the property it is for, on the session and on the payment, so a Stripe
+  // account shared with LunArt can tell the two apart (see `handleStripeEvent`).
+  assert.equal(params.metadata.property, 'bella-vigna');
+  assert.equal(params.payment_intent_data.metadata.property, 'bella-vigna');
+  assert.equal(params.payment_intent_data.metadata.order_id, params.metadata.order_id);
+  assert.match(params.payment_intent_data.description, /^Bella Vigna · /, 'what the guest sees on the statement');
   assert.match(params.success_url, /^https:\/\/guide\.example\/#\/order\//);
   assert.ok(options.idempotencyKey, 'writes carry an idempotency key');
   assert.equal(params.payment_link, undefined);
@@ -487,7 +657,7 @@ const payFor = async (lines) => {
    */
   resetRateLimits();
   const checkout = await api('/api/checkout', {
-    body: { lines, customer: { name: 'Jacopo', email: 'jacopo@example.com', room: '303' }, lang: 'it' },
+    body: { lines, customer: { name: 'Jacopo', email: 'jacopo@example.com', room: ROOM }, lang: 'it' },
   });
   assert.equal(checkout.status, 200, JSON.stringify(checkout.body));
   const session = decodeURIComponent(checkout.body.checkoutUrl.split('session=')[1]);
@@ -497,7 +667,7 @@ const payFor = async (lines) => {
 
 const brunchLine = (over = {}) => ({
   productId: 'brunch', variantId: 'opera', quantity: 1,
-  date: soon(2), slotId: 'b-0900', room: '303', options: { hotDrink: 'cappuccino' }, ...over,
+  date: soon(2), slotId: 'b-0900', room: ROOM, options: { hotDrink: 'cappuccino' }, ...over,
 });
 
 const cardLine = (over = {}) => ({
@@ -505,7 +675,7 @@ const cardLine = (over = {}) => ({
   date: soon(1), fields: { holderName: 'Jacopo Lunardi' }, ...over,
 });
 
-test('the order carries its own cancellation terms, and no Stripe id', async () => {
+test('the order carries its own cancellation terms, and no Stripe id', () => withAgreements(async () => {
   const token = await payFor([brunchLine(), cardLine()]);
   const { body } = await api(`/api/orders/${token}`);
 
@@ -520,9 +690,9 @@ test('the order carries its own cancellation terms, and no Stripe id', async () 
   const json = JSON.stringify(body);
   assert.ok(!json.includes('pi_mock'), 'no payment intent');
   assert.ok(!json.includes('cs_mock'), 'no checkout session');
-});
+}));
 
-test('the guest cancels the brunch and keeps the Privilege Card', async () => {
+test('the guest cancels the brunch and keeps the Privilege Card', () => withAgreements(async () => {
   const token = await payFor([brunchLine(), cardLine()]);
   const before = await api(`/api/orders/${token}`);
   const cardToken = before.body.entitlements[0].access_token;
@@ -538,7 +708,7 @@ test('the guest cancels the brunch and keeps the Privilege Card', async () => {
   const card = await api(`/api/card/${cardToken}`);
   assert.equal(card.status, 200);
   assert.ok(card.body.reference, 'the card is not revoked');
-});
+}));
 
 test('the same cancellation twice is refused the second time', async () => {
   const token = await payFor([brunchLine()]);
@@ -552,12 +722,12 @@ test('the same cancellation twice is refused the second time', async () => {
   assert.equal(after.body.refunded_amount, 6900, 'and nothing further came back');
 });
 
-test('a line sold outright cannot be cancelled through the API either', async () => {
+test('a line sold outright cannot be cancelled through the API either', () => withAgreements(async () => {
   const token = await payFor([cardLine()]);
   const refused = await api(`/api/orders/${token}/cancel`, { body: { line: 0 } });
   assert.equal(refused.status, 409);
   assert.equal(refused.body.error, 'policy-none');
-});
+}));
 
 test('nothing the request says about money is read', async () => {
   const token = await payFor([brunchLine()]);
@@ -593,7 +763,7 @@ test('cancelling part of an authorised transfer reduces what will be captured', 
         { ...transferLine(), variantId: 'from-airport', date: soon(3), time: '14:00' },
         { ...transferLine(), variantId: 'to-airport', date: soon(6), time: '09:30' },
       ],
-      customer: { name: 'Jacopo', email: 'jacopo@example.com', room: '303' },
+      customer: { name: 'Jacopo', email: 'jacopo@example.com', room: ROOM },
       lang: 'it',
     },
   });

@@ -79,7 +79,7 @@ async function loadWorker({ offline = false, slow = false } = {}) {
   const scope = {
     self,
     caches,
-    location: { origin: 'https://lunart.example' },
+    location: { origin: 'https://bellavigna.example' },
     fetch: fetchImpl,
     URL,
     Promise,
@@ -107,14 +107,14 @@ async function request(worker, { url, mode = 'no-cors', destination = '', method
 }
 
 const URL_OF = {
-  page: 'https://lunart.example/g/abc',
-  script: 'https://lunart.example/src/main.js',
-  style: 'https://lunart.example/assets/css/app.css',
-  manifest: 'https://lunart.example/manifest.webmanifest',
-  photo: 'https://lunart.example/assets/img/rooms/304-letto-700.webp',
-  font: 'https://lunart.example/assets/fonts/dm-sans.woff2',
-  api: 'https://lunart.example/api/catalog',
-  unknown: 'https://lunart.example/something-new',
+  page: 'https://bellavigna.example/g/abc',
+  script: 'https://bellavigna.example/src/main.js',
+  style: 'https://bellavigna.example/assets/css/app.css',
+  manifest: 'https://bellavigna.example/manifest.webmanifest',
+  photo: 'https://bellavigna.example/assets/img/rooms/deluxe-camera-700.webp',
+  font: 'https://bellavigna.example/assets/fonts/dm-sans.woff2',
+  api: 'https://bellavigna.example/api/catalog',
+  unknown: 'https://bellavigna.example/something-new',
   offsite: 'https://fonts.example/x.woff2',
 };
 
@@ -130,7 +130,7 @@ test('the API is not handled by the service worker at all', async () => {
 test('a price the server recalculated is never answered from a cache', async () => {
   const worker = await loadWorker();
   // Plant a stale price, the way an earlier cache-first worker would have.
-  const cache = await worker.caches.open('lunart-guide-v3');
+  const cache = await worker.caches.open('bellavigna-guide-v1');
   await cache.put(URL_OF.api, { body: 'network:stale-prices', ok: true, type: 'basic' });
 
   const answer = await request(worker, { url: URL_OF.api, destination: 'empty' });
@@ -142,7 +142,7 @@ test('a price the server recalculated is never answered from a cache', async () 
 
 test('a redeployed script is served from the network, even with a copy in the cache', async () => {
   const worker = await loadWorker();
-  const cache = await worker.caches.open('lunart-guide-v3');
+  const cache = await worker.caches.open('bellavigna-guide-v1');
   await cache.put(URL_OF.script, { body: 'network:OLD', ok: true, type: 'basic' });
 
   const answer = await request(worker, { url: URL_OF.script, destination: 'script' });
@@ -157,7 +157,7 @@ test('the same holds for the stylesheet, the manifest and the page itself', asyn
     ['page', 'document', 'navigate'],
   ]) {
     const worker = await loadWorker();
-    const cache = await worker.caches.open('lunart-guide-v3');
+    const cache = await worker.caches.open('bellavigna-guide-v1');
     await cache.put(URL_OF[name], { body: 'network:OLD', ok: true, type: 'basic' });
     const answer = await request(worker, { url: URL_OF[name], destination, mode });
     assert.equal((await answer).body, `network:${URL_OF[name]}`, name);
@@ -168,7 +168,7 @@ test('a module fetched without a destination is still treated as mutable', async
   // A plain `fetch()` for a .js file arrives with destination "" — classifying by
   // destination alone would quietly make that one cache-first again.
   const worker = await loadWorker();
-  const cache = await worker.caches.open('lunart-guide-v3');
+  const cache = await worker.caches.open('bellavigna-guide-v1');
   await cache.put(URL_OF.script, { body: 'network:OLD', ok: true, type: 'basic' });
 
   const answer = await request(worker, { url: URL_OF.script, destination: '' });
@@ -177,7 +177,7 @@ test('a module fetched without a destination is still treated as mutable', async
 
 test('anything the worker does not recognise is treated as though it could change', async () => {
   const worker = await loadWorker();
-  const cache = await worker.caches.open('lunart-guide-v3');
+  const cache = await worker.caches.open('bellavigna-guide-v1');
   await cache.put(URL_OF.unknown, { body: 'network:OLD', ok: true, type: 'basic' });
 
   const answer = await request(worker, { url: URL_OF.unknown, destination: 'empty' });
@@ -188,7 +188,7 @@ test('anything the worker does not recognise is treated as though it could chang
 
 test('a photograph already held is answered without touching the network', async () => {
   const worker = await loadWorker();
-  const cache = await worker.caches.open('lunart-guide-v3');
+  const cache = await worker.caches.open('bellavigna-guide-v1');
   await cache.put(URL_OF.photo, { body: 'network:held', ok: true, type: 'basic' });
 
   const answer = await request(worker, { url: URL_OF.photo, destination: 'image' });
@@ -207,7 +207,7 @@ test('a font is cached first too, and fetched the first time', async () => {
 
 test('offline, the cached guide still answers', async () => {
   const worker = await loadWorker({ offline: true });
-  const cache = await worker.caches.open('lunart-guide-v3');
+  const cache = await worker.caches.open('bellavigna-guide-v1');
   await cache.put(URL_OF.script, { body: 'network:held', ok: true, type: 'basic' });
 
   const answer = await request(worker, { url: URL_OF.script, destination: 'script' });
@@ -216,7 +216,7 @@ test('offline, the cached guide still answers', async () => {
 
 test('offline, a personal link falls back to the guide page rather than to nothing', async () => {
   const worker = await loadWorker({ offline: true });
-  const cache = await worker.caches.open('lunart-guide-v3');
+  const cache = await worker.caches.open('bellavigna-guide-v1');
   await cache.put('index.html', { body: 'network:the-guide', ok: true, type: 'basic' });
 
   const answer = await request(worker, { url: URL_OF.page, mode: 'navigate', destination: 'document' });
@@ -225,7 +225,7 @@ test('offline, a personal link falls back to the guide page rather than to nothi
 
 test('a connection that hangs gives way to the cache rather than to a spinner', async () => {
   const worker = await loadWorker({ slow: true });
-  const cache = await worker.caches.open('lunart-guide-v3');
+  const cache = await worker.caches.open('bellavigna-guide-v1');
   await cache.put(URL_OF.script, { body: 'network:held', ok: true, type: 'basic' });
 
   const answer = request(worker, { url: URL_OF.script, destination: 'script' });
@@ -239,21 +239,23 @@ test('a connection that hangs gives way to the cache rather than to a spinner', 
 /* ── Housekeeping ────────────────────────────────────────────────────────── */
 
 test('activating clears every cache but the current one', async () => {
+  // Each property's guide runs on its own origin, so its worker never sees the
+  // other's caches; on its own origin it still retires whatever an older build left.
   const worker = await loadWorker();
-  await worker.caches.open('lunart-guide-v2.1.0');
-  await worker.caches.open('lunart-guide-v3');
+  await worker.caches.open('bellavigna-guide-v0');
+  await worker.caches.open('bellavigna-guide-v1');
 
   const waits = [];
   worker.listeners.get('activate')({ waitUntil: (p) => waits.push(p) });
   await Promise.all(waits);
 
-  assert.deepEqual(await worker.caches.keys(), ['lunart-guide-v3'],
-    'a browser holding the old cache-first store is retired by this');
+  assert.deepEqual(await worker.caches.keys(), ['bellavigna-guide-v1'],
+    'a browser holding an older store is retired by this');
 });
 
-test('the cache name was bumped past the one that served stale scripts', async () => {
+test('the cache is named for the property, and carries the network-first strategy from its first version', async () => {
   const worker = await loadWorker();
-  assert.equal(worker.exported.CACHE, 'lunart-guide-v3');
+  assert.equal(worker.exported.CACHE, 'bellavigna-guide-v1');
   assert.ok(worker.exported.PRECACHE_LENGTH > 0);
 });
 

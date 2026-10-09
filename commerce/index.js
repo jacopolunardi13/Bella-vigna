@@ -85,8 +85,9 @@ export const sellableSkusOf = (product) => (
  * `requiresPartners` is the rail under LunArt Privilege: an upgrade with no venue
  * behind it is an empty promise, so it is not for sale until one exists. It was
  * never a switch to be flipped — it reads the register, and it comes back by itself
- * the moment a real partner is reserved for the card. Le Firme and Blue Velvet are
- * that moment, so the rail now passes in production with nothing here to change.
+ * the moment a real partner is reserved for the card. At LunArt, Le Firme and Blue
+ * Velvet are that moment. At Bella Vigna no agreement is confirmed yet, so the rail
+ * holds the upgrade off sale everywhere — preview included — until one is.
  *
  * Nothing else was relaxed. The prices still have to be `confirmed`, the product
  * still has to be active, and a server with no partners would refuse to sell it

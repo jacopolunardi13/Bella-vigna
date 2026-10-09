@@ -1,9 +1,9 @@
 {
-  "name": "lunart-guest-guide",
+  "name": "bella-vigna-guest-guide",
   "version": "2.0.0",
   "private": true,
   "type": "module",
-  "description": "LunArt \u2014 Guest Guide & Concierge",
+  "description": "Bella Vigna Firenze — Guest Guide & Concierge (LunArt core, golden 51ac362)",
   "scripts": {
     "test": "node --test test/*.test.mjs",
     "serve": "node tools/serve.mjs",

@@ -1,23 +1,29 @@
 /**
- * The LunArt Pass, the purchases that belong to a stay, and the three offers.
+ * The Bella Vigna Pass, the purchases that belong to a stay, and the three offers.
  *
  * Three things are being protected here, and they are not the same kind of thing.
  *
- * The Pass is a promise about paper: LunArt hands out breakfast tokens and Opera
- * Caffè collects them, and the Pass is the half of that check which knows what day
- * it is. If a Pass says "attiva" after the guest has gone home, a voucher kept
- * from August is good forever. So its states are tested at the hour boundaries,
- * not in the middle of a stay where every implementation would agree.
+ * The Pass is a promise about paper: where the house hands out breakfast tokens
+ * and a venue collects them — LunArt's arrangement with Opera Caffè, which Bella
+ * Vigna's agreement does not cover yet — the Pass is the half of that check which
+ * knows what day it is. If a Pass says "attiva" after the guest has gone home, a
+ * voucher kept from August is good forever. So its states are tested at the hour
+ * boundaries, not in the middle of a stay where every implementation would agree.
  *
  * The purchases are a promise about devices: a guest who ordered on the laptop and
  * opens the link on their phone has to find the order. That means the server
  * answers, not the browser — and the moment the server answers, the question
  * becomes whose orders it will hand over, which is the isolation test.
  *
- * The ranking is a promise about short stays: most LunArt bookings are a night or
- * two, so anything that hides a product behind a phase hides most of the catalogue
+ * The ranking is a promise about short stays: most bookings are a night or two,
+ * so anything that hides a product behind a phase hides most of the catalogue
  * most of the time. The tests check that the order changes and that the set never
  * shrinks.
+ *
+ * Partner benefits are asserted twice where they matter: in Bella Vigna's own
+ * register, where no agreement is confirmed and so the Pass promises nothing from
+ * any venue, and with the agreements confirmed (`test/support/property.mjs`), where
+ * the rules LunArt runs on have to hold the day they apply here too.
  */
 
 import test from 'node:test';
@@ -32,9 +38,12 @@ import { buildCard } from '../server/card.js';
 import { featuredProducts, momentOf, PRIORITY, FEATURED } from '../commerce/ranking.js';
 import { PRODUCTS } from '../commerce/catalog.js';
 import { isPurchasable } from '../commerce/index.js';
-import { applyPartners, PARTNERS, cardPartners, stayBenefits, cardBenefits } from '../commerce/partners.js';
+import {
+  applyPartners, partnersInForce, getPartner, cardPartners, stayBenefits, cardBenefits,
+} from '../commerce/partners.js';
 import { applyPriceOverrides } from '../commerce/prices.js';
 import { DEV_PRICES } from '../commerce/prices.dev.js';
+import { confirmAllAgreements, restoreAgreements, asIfConfirmed } from './support/property.mjs';
 
 /** Far enough ahead that a wine order's lead time is met whenever this runs. */
 const inDays = (n) => new Date(Date.now() + n * 86_400_000).toISOString().slice(0, 10);
@@ -45,7 +54,7 @@ const stay = (overrides = {}) => buildReservation({
   booking_reference: `T-${Math.random().toString(36).slice(2, 8)}`,
   first_name: 'Giulia',
   last_name: 'Rossi',
-  room: '303',
+  room: 'Deluxe',
   check_in: '2026-11-10',
   check_out: '2026-11-13',
   adults: 2,
@@ -59,7 +68,8 @@ test('every reservation has a Pass, and nobody bought it', () => {
   assert.ok(pass, 'a reservation is enough');
   assert.equal(pass.tier, PASS_TIER.pass);
   assert.equal(pass.holder, 'Giulia');
-  assert.equal(pass.room, '303');
+  assert.equal(pass.room, 'Deluxe');
+  assert.deepEqual(pass.rooms, ['Deluxe'], 'one of the house’s own rooms');
   assert.equal(pass.check_in, '2026-11-10');
   assert.equal(pass.check_out, '2026-11-13');
   assert.equal(pass.nights, 3);
@@ -190,14 +200,47 @@ test('a revoked card does not keep a Pass looking Privilege', async () => {
 
 /* ── What is included is not what is for sale ───────────────────────────── */
 
+/** For the length of one test, the shared network's agreements as if they covered Bella Vigna. */
+async function withAgreements(body) {
+  confirmAllAgreements();
+  try {
+    return await body();
+  } finally {
+    restoreAgreements();
+  }
+}
+
+/**
+ * What Bella Vigna's Pass promises today.
+ *
+ * Opera Caffè's 30% is LunArt's agreement. Until the venue confirms it holds for
+ * Bella Vigna guests too, Opera is listed in attivazione — name and address, no
+ * benefit — and the Pass promises nothing from it: a guest who shows a Pass at a
+ * table that has never heard of it is worse off than one who was told nothing.
+ */
+test('at Bella Vigna Opera Caffè is in attivazione, and the Pass promises nothing from it yet', () => {
+  const opera = getPartner('opera-caffe');
+  assert.ok(opera, 'still listed');
+  assert.equal(opera.partnership_status, 'activating');
+  assert.deepEqual(opera.benefits, [], 'with no benefit to claim');
+
+  assert.ok(!stayBenefits().some((b) => b.partner_id === 'opera-caffe'), 'not part of the stay yet');
+  assert.ok(!cardBenefits().some((b) => b.partner_id === 'opera-caffe'), 'and certainly not sold as a card benefit');
+
+  const pass = passFor(stay());
+  assert.ok(!pass.included.some((b) => b.partner_id === 'opera-caffe'));
+  assert.ok(!pass.privileges.some((b) => b.partner_id === 'opera-caffe'));
+});
+
 /**
  * The line that must never move.
  *
  * Opera Caffè's 30% comes with the stay. Listing it as something the Privilege
  * upgrade unlocks would be selling a guest something they already have, which is
- * the fastest way to stop being believed.
+ * the fastest way to stop being believed. Proved with the agreement confirmed,
+ * because that is the day it applies at Bella Vigna.
  */
-test('the Opera Caffè benefit is part of the stay and never a Privilege benefit', () => {
+test('once agreed, the Opera Caffè benefit is part of the stay and never a Privilege benefit', () => withAgreements(() => {
   const included = stayBenefits().map((b) => b.partner_id);
   const privilege = cardBenefits().map((b) => b.partner_id);
 
@@ -207,9 +250,9 @@ test('the Opera Caffè benefit is part of the stay and never a Privilege benefit
   const pass = passFor(stay());
   assert.ok(pass.included.some((b) => b.partner_id === 'opera-caffe'));
   assert.ok(!pass.privileges.some((b) => b.partner_id === 'opera-caffe'));
-});
+}));
 
-test('an upgraded Pass still lists Opera under what the stay includes', async () => {
+test('an upgraded Pass still lists Opera under what the stay includes', () => withAgreements(async () => {
   const store = createStore();
   const reservation = await store.reservations.create(stay());
   await store.cards.create(buildCard({
@@ -224,28 +267,50 @@ test('an upgraded Pass still lists Opera under what the stay includes', async ()
   const pass = await passForReservation({ store, reservation });
   assert.ok(pass.included.some((b) => b.partner_id === 'opera-caffe'));
   assert.ok(!pass.privileges.some((b) => b.partner_id === 'opera-caffe'));
-});
+}));
 
 /**
  * Privilege is not on sale until there is something to sell.
  *
  * An upgrade whose only benefit is one the stay already gives is not a product, and
  * the catalogue refuses to sell it while no partner reserves anything for it. That
- * rail is still live — it reads the register on every call — it is simply satisfied
- * now that Le Firme and Blue Velvet are in it.
+ * rail is live — it reads the register on every call. At LunArt it is satisfied by
+ * Le Firme and Blue Velvet; at Bella Vigna neither agreement is confirmed yet, so
+ * the rail is closed, even on a preview that would sell the card's placeholder price.
  */
 test('Privilege cannot be sold while no partner offers a card benefit', () => {
-  const saved = PARTNERS.map((p) => ({ ...p }));
   const card = PRODUCTS.find((p) => p.id === 'privilege-card');
+
+  // Bella Vigna's own register.
+  assert.equal(cardPartners().length, 0, 'nobody reserves anything for the upgrade');
+  assert.equal(isPurchasable(card, { allowPlaceholders: true }), false, 'so it is not for sale, not even in the preview');
+
+  confirmAllAgreements();
   try {
-    applyPartners(saved.map((p) => ({ ...p, eligibility: { passState: 'active', entitlementsAll: [] } })));
-    assert.equal(cardPartners().length, 0, 'nobody reserves anything for the upgrade');
-    assert.equal(isPurchasable(card, { allowPlaceholders: true }), false, 'so it is not for sale');
+    assert.ok(cardPartners().length > 0, 'with the agreements confirmed, venues reserve something for it');
+    assert.equal(isPurchasable(card, { allowPlaceholders: true }), true, 'so the preview sells it');
+    assert.equal(isPurchasable(card), false, 'and production still waits on its price');
+
+    // The rail reads the register on every call: a register in which nobody
+    // reserves anything for the card closes it again, by itself.
+    const confirmed = partnersInForce();
+    applyPartners(confirmed.map((p) => ({ ...p, eligibility: { passState: 'active', entitlementsAll: [] } })));
+    assert.equal(cardPartners().length, 0);
+    assert.equal(isPurchasable(card, { allowPlaceholders: true }), false, 'nothing reserved, nothing to sell');
+    applyPartners(confirmed);
+    assert.equal(isPurchasable(card, { allowPlaceholders: true }), true, 'and with the partners back, it is');
   } finally {
-    applyPartners(saved);
+    restoreAgreements();
   }
-  assert.equal(isPurchasable(card, { allowPlaceholders: true }), true,
-    'and with the real partners back, it is');
+  assert.equal(cardPartners().length, 0, 'and Bella Vigna’s register is back as it was');
+
+  // Prices and agreements both confirmed: a production server sells it.
+  const restore = asIfConfirmed();
+  try {
+    assert.equal(isPurchasable(card), true);
+  } finally {
+    restore();
+  }
 });
 
 /**
@@ -257,12 +322,25 @@ test('Privilege cannot be sold while no partner offers a card benefit', () => {
  * every environment.
  */
 test('no partner in the register is a stand-in', () => {
-  for (const partner of cardPartners()) {
-    assert.doesNotMatch(
-      `${partner.partner_id} ${partner.name}`.toLowerCase(),
-      /demo|esempio|example|placeholder|fittizio/,
-      `"${partner.partner_id}" reads as a stand-in`,
-    );
+  const noStandIns = () => {
+    for (const partner of cardPartners()) {
+      assert.doesNotMatch(
+        `${partner.partner_id} ${partner.name}`.toLowerCase(),
+        /demo|esempio|example|placeholder|fittizio/,
+        `"${partner.partner_id}" reads as a stand-in`,
+      );
+    }
+  };
+  // Bella Vigna's register has no card partner at all — and no fake one filling the gap.
+  assert.equal(cardPartners().length, 0);
+  noStandIns();
+  // And the venues that will be there once the agreements are confirmed are real ones.
+  confirmAllAgreements();
+  try {
+    assert.ok(cardPartners().length > 0);
+    noStandIns();
+  } finally {
+    restoreAgreements();
   }
 });
 
@@ -393,7 +471,7 @@ test('the home offers three, and only things that can be bought', () => {
 /**
  * The reason the ranking is a ranking and not a filter.
  *
- * Most LunArt stays are one or two nights. A design that hid products by phase
+ * Most stays are one or two nights. A design that hid products by phase
  * would, on a one-night booking, hide most of the catalogue for most of the time
  * the guest is holding the phone.
  */
@@ -445,7 +523,7 @@ test('an order left pending is reconciled when the guest comes back to look at i
       guideToken: reservation.guide_token,
       lang: 'it',
       customer: { name: 'Giulia Rossi', email: 'giulia@example.invalid' },
-      lines: [{ productId: 'wine-in-room', variantId: 'chianti-barrique', quantity: 1, date: WINE_DAY, slotId: 'w-1900', room: '303' }],
+      lines: [{ productId: 'wine-in-room', variantId: 'chianti-barrique', quantity: 1, date: WINE_DAY, slotId: 'w-1900', room: 'Deluxe' }],
     }),
   })).json();
 
@@ -490,7 +568,7 @@ test('a purchase made on a personal link is filed against that stay', async (t) 
       guideToken: reservation.guide_token,
       lang: 'it',
       customer: { name: 'Giulia Rossi', email: 'giulia@example.invalid' },
-      lines: [{ productId: 'wine-in-room', variantId: 'chianti-barrique', quantity: 1, date: WINE_DAY, slotId: 'w-1900', room: '303' }],
+      lines: [{ productId: 'wine-in-room', variantId: 'chianti-barrique', quantity: 1, date: WINE_DAY, slotId: 'w-1900', room: 'Deluxe' }],
     }),
   })).json();
   assert.ok(checkout.accessToken);

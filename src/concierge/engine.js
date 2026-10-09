@@ -14,7 +14,7 @@
 
 import { keysOf, formKeys } from './normalize.js';
 import { CONCEPTS, QUESTION, FOLLOW_UP, STOPWORDS } from './lexicon.js';
-import { INTENTS, QUICK_REPLIES } from './intents.js';
+import { INTENTS, QUICK_REPLIES, UNPUBLISHED_TOPICS } from './intents.js';
 
 /** Build `key -> Set(conceptId)`. A key may legitimately belong to several concepts. */
 function buildIndex(groups) {
@@ -123,6 +123,11 @@ const AMBIGUITY_MARGIN = 0.15;
 export function ask(text, { phase = 'staying', memory = null } = {}) {
   const { concepts, questions, keys, followUp } = analyse(text);
   const question = questions.values().next().value ?? null;
+
+  // About something this property publishes nothing on: a person answers that.
+  if ([...concepts].some((concept) => UNPUBLISHED_TOPICS.has(concept))) {
+    return { kind: 'fallback', question, suggestions: QUICK_REPLIES[phase] ?? QUICK_REPLIES.staying, unpublished: true };
+  }
 
   const rank = (pool) => pool
     .map((i) => scoreIntent(i, concepts))

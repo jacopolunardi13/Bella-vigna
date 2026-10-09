@@ -164,7 +164,7 @@ export function cardBenefitsBlock(card, lang) {
  *   1. It carries no code. `validateCode` refuses an empty code as `malformed`
  *      before it has looked anything up.
  *   2. It is not a URL. The live QR is a validation link, so a phone camera opens
- *      the venue page; this opens nothing, because `lunart:` is not a scheme any
+ *      the venue page; this opens nothing, because `bellavigna:` is not a scheme any
  *      browser will follow.
  *   3. Even with the right reference and a correct code, the server refuses a card
  *      whose state is not `active` — which is the rule that was already there and

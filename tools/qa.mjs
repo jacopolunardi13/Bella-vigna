@@ -15,6 +15,10 @@ import { chromium, devices } from 'playwright';
 import { mkdir, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { rooms as publishedRooms } from '../data/rooms.js';
+
+/** How many rooms the property publishes: five at LunArt, three at Bella Vigna. */
+const PUBLISHED_ROOMS = publishedRooms.length;
 
 const OUT = new URL('.qa-screens/', import.meta.url).pathname;
 const BASE = process.env.BASE_URL ?? 'http://localhost:4173/';
@@ -177,7 +181,7 @@ await page.fill('#concierge-input', 'qual è la password del wifi');
 await page.press('#concierge-input', 'Enter');
 await page.waitForTimeout(350);
 const reply = await page.locator('.bubble--concierge').last().textContent();
-note(reply.includes('LOPERACAFFE62R'), `concierge answers wifi (${reply.slice(0, 60).trim()}…)`);
+note(reply.includes('WINDTRE-96F14E'), `concierge answers wifi (${reply.slice(0, 60).trim()}…)`);
 await page.fill('#concierge-input', 'avete biscotti?');
 await page.press('#concierge-input', 'Enter');
 await page.waitForTimeout(350);
@@ -264,7 +268,7 @@ note(errors.length === 0, `no page errors during interaction (${errors.slice(0,2
   await page.goto(`${BASE}#/e/wifi`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(500);
   note(await page.isVisible('.sheet[data-open="true"]'), 'deep link opens the sheet directly');
-  note((await page.textContent('.sheet__body')).includes('LOPERACAFFE62R'), 'deep-linked sheet shows the right entry');
+  note((await page.textContent('.sheet__body')).includes('WINDTRE-96F14E'), 'deep-linked sheet shows the right entry');
 
   await page.goto(`${BASE}?review=1`, { waitUntil: 'networkidle' });
   await page.waitForTimeout(300);
@@ -304,7 +308,7 @@ note(errors.length === 0, `no page errors during interaction (${errors.slice(0,2
     `every entry the home owns is still on it (${reach.owned} entries, ${reach.missing.join(', ') || 'none missing'})`);
   // The catalogue belongs to the public guide, where nobody has booked yet. On a
   // personal link it is gone entirely — qa-reservations checks that end.
-  note(reach.rooms >= 5, `the public guide still shows all five rooms (${reach.rooms})`);
+  note(reach.rooms >= PUBLISHED_ROOMS, `the public guide still shows every room (${reach.rooms} of ${PUBLISHED_ROOMS})`);
   note((await page.locator('#fold-rooms').count()) === 1, 'in their own fold');
 
   // The Florence and Help sections have their own views; check they still fill.
@@ -510,7 +514,7 @@ note(errors.length === 0, `no page errors during interaction (${errors.slice(0,2
   await page.click('.sheet [data-copy]:last-of-type, .sheet [data-copy]');
   await page.waitForTimeout(250);
   const clip = await page.evaluate(() => navigator.clipboard.readText());
-  note(clip === 'LunArt-Guest' || clip === 'LOPERACAFFE62R', `copy button copies the value (${clip})`);
+  note(clip === 'WINDTRE-96F14E', `copy button copies the value (${clip})`);
   note((await page.getAttribute('.sheet [data-copy]', 'data-copied')) === 'true', 'copy button confirms it worked');
 
   // A guest in a stairwell with no signal should still get the Wi-Fi password.

@@ -31,11 +31,12 @@ import { buildReservation, RESERVATION_STATUS } from '../server/reservations.js'
 import { applyPriceOverrides } from '../commerce/prices.js';
 import { DEV_PRICES } from '../commerce/prices.dev.js';
 import { propertyDate, propertyTimeToInstant, addDays } from '../commerce/time.js';
+import { confirmAllAgreements, restoreAgreements } from './support/property.mjs';
 
 /* ── Harness ─────────────────────────────────────────────────────────────── */
 
 const VAPID = {
-  vapidPublicKey: 'BPublic', vapidPrivateKey: 'private', vapidSubject: 'mailto:lunartfirenze@gmail.com',
+  vapidPublicKey: 'BPublic', vapidPrivateKey: 'private', vapidSubject: 'mailto:staff@example.invalid',
 };
 
 /**
@@ -61,7 +62,13 @@ function countingTransport({ explode = false } = {}) {
 
 const SUBSCRIPTION = (endpoint) => ({ endpoint, keys: { p256dh: 'p', auth: 'a' } });
 
-/** A server with one registered device and a transport we can count. */
+/**
+ * A server with one registered device and a transport we can count.
+ *
+ * Configured as Bella Vigna's preview is: LunArt's figures are placeholders here,
+ * and a preview may charge them in test money. What is counted is the phones, not
+ * the prices.
+ */
 async function bootWithPush({ explode = false, staffToken = '', mode = 'development' } = {}) {
   const store = createStore();
   const transport = countingTransport({ explode });
@@ -101,11 +108,11 @@ async function bootWithPush({ explode = false, staffToken = '', mode = 'developm
 }
 
 const soon = (days) => addDays(propertyDate(), days);
-const CUSTOMER = { name: 'Jacopo Lunardi', email: 'jacopo@example.invalid', room: '303' };
+const CUSTOMER = { name: 'Jacopo Lunardi', email: 'jacopo@example.invalid', room: 'Deluxe' };
 
 /** A breakfast, far enough ahead that the guest may still change their mind. */
 const breakfast = (over = {}) => ({
-  productId: 'light-breakfast', quantity: 2, date: soon(4), slotId: 'b-0900', room: '303', ...over,
+  productId: 'light-breakfast', quantity: 2, date: soon(4), slotId: 'b-0900', room: 'Deluxe', ...over,
 });
 
 /** A transfer: authorised at checkout, captured when a driver says yes. */
@@ -146,9 +153,11 @@ test('A cancellation that goes through buzzes the phones exactly once', async ()
     assert.equal(transport.count('order-cancelled'), 1, 'one cancellation, one notification');
 
     const note = transport.sent.find((entry) => entry.event === 'order-cancelled').payload;
-    assert.equal(note.title, 'Annullamento ospite', 'it says who did it, at a glance');
+    // Which house first — the same phone may carry LunArt's Staff app — then who.
+    assert.equal(note.title, 'Bella Vigna · Annullamento ospite', 'it says who did it, at a glance');
+    assert.equal(note.property, 'bella-vigna');
     assert.match(note.body, /Breakfast|Colazione/i, 'and what');
-    assert.match(note.body, /Camera 303/, 'and where');
+    assert.match(note.body, /Camera Deluxe/, 'and where');
     assert.match(note.body, /Rimborso /, 'and what happened to the money');
     assert.match(note.body, /×2/, 'and how many');
     assert.equal(note.url, '/staff', 'tapping it opens the Staff app');
@@ -176,6 +185,10 @@ test('A one order has one reference, wherever it is printed', async () => {
 });
 
 test('A cancellation that is refused tells nobody anything', async () => {
+  // The non-refundable line here is a Privilege Card, which needs a venue that
+  // reserves something for it. None does at Bella Vigna until an agreement is
+  // confirmed, so the agreements are in force for this test and put back after.
+  confirmAllAgreements();
   const { api, transport, close } = await bootWithPush();
   try {
     // A Privilege Card: bought, issued, and not refundable. The policy says no.
@@ -189,7 +202,10 @@ test('A cancellation that is refused tells nobody anything', async () => {
     assert.equal(status, 409, `expected a refusal, got ${JSON.stringify(body)}`);
     assert.equal(transport.count('order-cancelled'), 0, 'nothing happened, so nothing is announced');
     assert.equal(transport.sent.length, 1, 'still just the purchase');
-  } finally { close(); }
+  } finally {
+    close();
+    restoreAgreements();
+  }
 });
 
 test('A line that has already gone is not announced a second time', async () => {
@@ -286,13 +302,27 @@ test('B the same payment arriving twice under two event ids buzzes once', async 
 test('B the four staff events all render, and the cancellation is tagged per line', () => {
   const one = buildNotification('order-cancelled', {
     orderId: 'o1', line: 0, reference: '712713C9', title: 'Brunch — Opera',
-    room: '303', quantity: 2, money: 'Rimborso 69,00 €', when: '8 nov 09:00',
+    room: 'Deluxe', quantity: 2, money: 'Rimborso 69,00 €', when: '8 nov 09:00',
   });
   const two = buildNotification('order-cancelled', { orderId: 'o1', line: 1, title: 'Vino' });
 
-  assert.equal(one.title, 'Annullamento ospite');
-  assert.equal(one.body, 'Brunch — Opera ×2 · Camera 303 · Rimborso 69,00 € · era per 8 nov 09:00 · Ordine 712713C9');
+  assert.equal(one.title, 'Bella Vigna · Annullamento ospite');
+  assert.equal(one.body, 'Brunch — Opera ×2 · Camera Deluxe · Rimborso 69,00 € · era per 8 nov 09:00 · Ordine 712713C9');
   assert.notEqual(one.tag, two.tag, 'two cancellations on one order are two things to know');
+  assert.equal(one.tag, 'bella-vigna:order-cancel:o1:0',
+    'and namespaced by property, so LunArt’s order o1 never replaces ours on a shared phone');
+
+  // The other three render too, every one under the house's name.
+  const others = [
+    buildNotification('order-new', { orderId: 'o2', title: 'Vino in camera', room: 'Deluxe', express: true }),
+    buildNotification('order-awaiting', { orderId: 'o3', title: 'Transfer' }),
+    buildNotification('reservation-new', { reservationId: 'r1', guest: 'Marta', room: 'Terrazza', check_in: '2026-11-08', check_out: '2026-11-10' }),
+  ];
+  for (const note of others) {
+    assert.ok(note, 'it renders');
+    assert.match(note.title, /^Bella Vigna · /, note.event);
+    assert.match(note.tag, /^bella-vigna:/, note.event);
+  }
 });
 
 /* ══ C. The dry run ══════════════════════════════════════════════════════ */
@@ -312,7 +342,7 @@ async function backlog() {
     made[key] = await db.reservations.create(buildReservation({
       source: 'quovai', booking_reference: key.toUpperCase(),
       first_name: 'Ospite', last_name: key, guest_email: `${key}@example.invalid`,
-      check_in: addDays(today, 5), check_out: addDays(today, 8), room: '303',
+      check_in: addDays(today, 5), check_out: addDays(today, 8), room: 'Deluxe',
       ...over,
     }));
     return made[key];
@@ -397,7 +427,7 @@ test('C the dry run names who would be written to, and sends nothing', async () 
 
   // Each row carries what staff need to recognise the person and check the state.
   const row = preview.rows.find((entry) => entry.reservation_id === made.futura.id);
-  assert.equal(row.room, '303');
+  assert.equal(row.room, 'Deluxe');
   assert.equal(row.check_in, addDays(today, 2));
   assert.equal(row.check_out, addDays(today, 5));
   assert.equal(row.reference, made.futura.staff_ref);

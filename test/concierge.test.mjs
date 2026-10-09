@@ -55,14 +55,33 @@ test('positive queries — Italian', async (t) => {
     ['dove si mangia la bistecca', 'eat'],
     ['il codice per entrare', 'access'],
     ['il condizionatore non parte', 'climate'],
-    ['lo scaldasalviette è freddo', 'towel-rail'],
     ['sono vegetariano', 'dietary'],
     ['quanto è la tassa di soggiorno', 'city-tax'],
     ['avete una culla', 'children'],
     ['c’è l’ascensore', 'accessibility'],
+    ['com’è la terrazza', 'terrace'],
   ];
   for (const [query, expected] of cases) {
     await t.test(query, () => answers(query, expected));
+  }
+});
+
+/**
+ * The intent table is shared with LunArt; Bella Vigna's knowledge layer is not.
+ * A question about something only LunArt has — the heated towel rail, the
+ * welcome prosecco, the café on the corner of LunArt's building — must reach a
+ * person, never LunArt's answer and never a near miss.
+ */
+test('a question only LunArt can answer is handed to a person at Bella Vigna', async (t) => {
+  for (const query of ['lo scaldasalviette è freddo', 'c’è il prosecco di benvenuto', 'the heated towel rail is cold']) {
+    await t.test(query, () => declines(query));
+  }
+  const intents = new Set(INTENTS.map((intent) => intent.id));
+  for (const missing of ['towel-rail', 'welcome', 'breakfast-light']) {
+    assert.equal(intents.has(missing), false, `${missing} has no Bella Vigna entry and must not be an intent here`);
+  }
+  for (const intent of INTENTS) {
+    assert.ok(getEntry(intent.entry), `${intent.id} answers with an entry Bella Vigna publishes`);
   }
 });
 

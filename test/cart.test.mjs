@@ -3,7 +3,8 @@
  *
  * `cart.js` is a browser module, so these run against a small localStorage stand-in.
  * That is also what makes the failure modes testable: storage that throws, storage
- * holding nonsense, storage that is simply full.
+ * holding nonsense, storage that is simply full — and a phone that also holds
+ * LunArt's guide, whose basket must never turn up in this one.
  */
 
 import test from 'node:test';
@@ -13,12 +14,18 @@ import { applyPriceOverrides } from '../commerce/prices.js';
 import { DEV_PRICES } from '../commerce/prices.dev.js';
 import { propertyDate, addDays } from '../commerce/time.js';
 
-const KEY = 'lunart.cart.v1';
+/**
+ * Where this guide keeps its basket: under the property's own prefix, so two
+ * guides on one phone never share a key. Written out rather than imported from
+ * `data/brand.js`, because the literal is the thing being proved.
+ */
+const KEY = 'bellavigna.cart.v1';
+const LUNART_KEY = 'lunart.cart.v1';
 const soon = (days) => addDays(propertyDate(), days);
 
 /** A localStorage that behaves, and can be made to misbehave. */
-function fakeStorage({ failWrites = false, initial = null } = {}) {
-  const map = new Map(initial ? [[KEY, initial]] : []);
+function fakeStorage({ failWrites = false, initial = null, others = {} } = {}) {
+  const map = new Map([...Object.entries(others), ...(initial ? [[KEY, initial]] : [])]);
   return {
     getItem: (key) => (map.has(key) ? map.get(key) : null),
     setItem: (key, value) => {
@@ -27,6 +34,8 @@ function fakeStorage({ failWrites = false, initial = null } = {}) {
     },
     removeItem: (key) => map.delete(key),
     get raw() { return map.get(KEY); },
+    get keys() { return [...map.keys()]; },
+    read: (key) => map.get(key),
   };
 }
 
@@ -39,10 +48,15 @@ async function loadCart(storage) {
 
 const wine = (over = {}) => ({
   productId: 'wine-in-room', variantId: 'brunello', quantity: 1,
-  date: soon(3), slotId: 'w-1900', room: '303', ...over,
+  date: soon(3), slotId: 'w-1900', room: 'Deluxe', ...over,
 });
 
-/** LunArt's own in-room prices, from `commerce/prices.js`. */
+/**
+ * LunArt's in-room prices, carried by `commerce/prices.js` as placeholders for
+ * Bella Vigna. The browser cart renders whatever table the server published —
+ * placeholders included, because whether one may be charged is the server's
+ * decision at checkout, not the basket's.
+ */
 const BRUNELLO = 8900;
 const VERMENTINO = 4300;
 const DOM = 59000;
@@ -76,7 +90,7 @@ test('different products and variants stay apart and add up', async () => {
   cart.add(wine());                                    // 89
   cart.add(wine({ variantId: 'vermentino' }));         // 43
   cart.add({ productId: 'brunch', variantId: 'opera', quantity: 1, date: soon(2),
-             slotId: 'b-0900', room: '303', options: { hotDrink: 'espresso' } });  // 69
+             slotId: 'b-0900', room: 'Deluxe', options: { hotDrink: 'espresso' } });  // 69
   assert.equal(cart.getLines().length, 3);
   assert.equal(cart.review().total, BRUNELLO + VERMENTINO + BRUNCH);
 });
@@ -113,6 +127,20 @@ test('the cart is written to storage and read back', async () => {
   assert.equal(second.count(), 2);
   assert.equal(second.getLines()[1].variantId, 'dom-perignon');
   assert.equal(second.review().total, BRUNELLO + DOM);
+  assert.deepEqual(storage.keys, [KEY], 'under this property’s key and no other');
+});
+
+test('a LunArt basket on the same phone is neither read nor overwritten', async () => {
+  // Diego's guests may hold both guides. LunArt's basket is LunArt's: a Bella
+  // Vigna guest must not open the shop to find someone else's Dom Pérignon in it.
+  const theirs = JSON.stringify([{ ...wine({ variantId: 'dom-perignon' }), room: '303' }]);
+  const storage = fakeStorage({ others: { [LUNART_KEY]: theirs } });
+  const cart = await loadCart(storage);
+  assert.equal(cart.count(), 0, 'nothing of theirs is in ours');
+
+  cart.add(wine());
+  assert.equal(storage.read(LUNART_KEY), theirs, 'and theirs is left exactly as it was');
+  assert.equal(JSON.parse(storage.raw)[0].variantId, 'brunello');
 });
 
 test('no amount is ever stored or sent', async () => {

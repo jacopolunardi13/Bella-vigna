@@ -22,7 +22,7 @@ import {
 import {
   priceAndBuild, stripeLineItems, fulfilOrder, orderView, orderReference, canTransition, appendEvent,
 } from './orders.js';
-import { roomsIn, roomList } from '../commerce/rooms.js';
+import { roomsIn, roomList, roomIdFor } from '../commerce/rooms.js';
 import { reconcileExternalRefund, refundFromCharge, REFUND_SOURCES } from './refunds.js';
 import { holderView, currentCode, validateCode, qrPayload, cardState, revoke } from './card.js';
 import {
@@ -92,10 +92,16 @@ export async function createApp(overrides = {}) {
      * with no card partner, so `requiresPartners` kept the upgrade off sale, and
      * the fixture was the only way to walk the flow end to end.
      *
-     * Le Firme and Blue Velvet retired it. Real venues now reserve real benefits
-     * for Privilege, the preview and production show the same register, and a demo
-     * venue standing next to them would only be a way to mislead whoever is
-     * testing. The partner register is no longer environment-dependent.
+     * Le Firme and Blue Velvet retired it at LunArt. Real venues now reserve real
+     * benefits for Privilege, the preview and production show the same register,
+     * and a demo venue standing next to them would only be a way to mislead whoever
+     * is testing. The partner register is no longer environment-dependent.
+     *
+     * At Bella Vigna that same rule means the preview cannot sell Privilege either:
+     * no agreement is confirmed for Bella Vigna yet (`PROPERTY_AGREEMENTS`), so no
+     * venue stands behind the card, and inventing one for a demo is exactly what
+     * the Property Pack forbids ("nessun QR o sconto fittizio"). The mechanics are
+     * proved by the test suite under `test/support/property.mjs` instead.
      */
   }
 
@@ -2025,13 +2031,23 @@ export async function handleStripeEvent(event, { store, stripe, settings, push =
  */
 export function roomForOrder({ claimed = '', lines = [], reservation = null }) {
   const rooms = roomsIn(reservation);
+  /**
+   * A typed room is read through the registry, so "deluxe", "Terrace" and
+   * "camera con terrazza" are the rooms they name rather than strangers to the
+   * booking. A string the registry does not know stays as typed — and on a
+   * multi-room stay is refused below, as before.
+   */
+  const canonical = (value) => {
+    const typed = String(value ?? '').trim();
+    return roomIdFor(typed) ?? typed;
+  };
 
   if (rooms.length <= 1) {
-    return { ok: true, room: String(claimed ?? '').trim() || reservation?.room || '' };
+    return { ok: true, room: canonical(claimed) || reservation?.room || '' };
   }
 
   const named = [claimed, ...lines.map((line) => line?.room)]
-    .map((value) => String(value ?? '').trim())
+    .map(canonical)
     .filter(Boolean);
 
   const outside = named.find((value) => !rooms.includes(value));

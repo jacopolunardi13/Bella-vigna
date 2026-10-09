@@ -5,6 +5,16 @@
  * likes, so the contract worth proving is that nothing it sends about money is
  * ever read: the server derives the SKU from its own catalogue and prices it
  * there.
+ *
+ * Bella Vigna runs LunArt's catalogue at LunArt's figures, and none of those
+ * figures is confirmed for Bella Vigna yet: each one is a `placeholder` whose
+ * `source` names LunArt. So two different things are proved here, and kept apart:
+ *
+ *   - Bella Vigna's real state: a production server sells none of it, a preview
+ *     (GUIDE_PREVIEW or ALLOW_PLACEHOLDER_PRICES) sells all of it;
+ *   - the mechanics — cut-offs, surcharges, upgrades, baskets — exactly as LunArt
+ *     runs them, under `confirmed()`, because the day the operator confirms a
+ *     price they must simply work.
  */
 
 import test from 'node:test';
@@ -16,6 +26,7 @@ import {
 } from '../commerce/ordering.js';
 import {
   resolvePrice, isSellable, applyPriceOverrides, pricingGaps, PRICES, WINE_PRICE_OVERRIDES,
+  CELEBRATION_UPGRADES,
 } from '../commerce/prices.js';
 import {
   WINES, getWine, leadTimeMinutesFor, curatedWines, leadMinutesForWineOrder, WINE_LEAD_TIME,
@@ -27,52 +38,158 @@ import {
 } from '../commerce/partners.js';
 import { propertyTimeToInstant, propertyDate, addDays, lastDayOf } from '../commerce/time.js';
 import { COMMERCE_CATEGORIES } from '../commerce/schema.js';
+import { asIfConfirmed, confirmAllAgreements, restoreAgreements } from './support/property.mjs';
 
 const NOW = new Date('2026-10-03T08:00:00Z');     // 10:00 in Florence
 const soon = (days) => addDays(propertyDate(NOW), days);
 
+/** A Bella Vigna room. A line only needs one to be named; which one is not priced. */
+const ROOM = 'Deluxe';
+
 const line = (over = {}) => ({
   productId: 'wine-in-room', variantId: 'brunello', quantity: 1,
-  date: soon(3), slotId: 'w-1900', room: '303', ...over,
+  date: soon(3), slotId: 'w-1900', room: ROOM, ...over,
 });
 
-/** The Brunello, at LunArt's own confirmed in-room price. */
+/** The Brunello, at LunArt's in-room price, which Bella Vigna carries as a placeholder. */
 const BRUNELLO = 8900;
+
+/**
+ * A test body run as if the operator had confirmed LunArt's terms for Bella Vigna:
+ * every placeholder price confirmed, every partner agreement in force. Put back
+ * afterwards, pass or fail, so no other test ever sees a price nobody confirmed.
+ */
+const confirmed = (body) => async (t) => {
+  const restore = asIfConfirmed();
+  try {
+    return await body(t);
+  } finally {
+    restore();
+  }
+};
+
+/**
+ * The config module reads the environment once, at import, so each reading of it
+ * is a fresh import with the variables set, and the variables are put back after.
+ * This is how the production and preview servers would actually be configured.
+ */
+async function settingsUnder(vars) {
+  const before = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]));
+  Object.assign(process.env, vars);
+  try {
+    const { config } = await import(`../server/config.js?commerce=${Math.random()}`);
+    return config;
+  } finally {
+    for (const [key, value] of Object.entries(before)) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
+
+/** Every SKU whose figure came from LunArt, by its own `source`, wines included. */
+const lunartSourced = () => [
+  ...Object.entries(PRICES)
+    .filter(([, entry]) => /LunArt/.test(entry.source ?? ''))
+    .map(([sku]) => sku),
+  ...Object.entries(WINE_PRICE_OVERRIDES)
+    .filter(([, entry]) => /LunArt/.test(entry.source ?? ''))
+    .map(([id]) => `wine:${id}`),
+];
 
 /* ── Prices ──────────────────────────────────────────────────────────────── */
 
-test('the confirmed prices are the ones LunArt has set', () => {
-  const confirmed = {
-    'transfer-airport': 9000,
-    'transfer-airport:oversized': 1500,
-    'privilege-card:2d': 1500,
-    'privilege-card:5d': 2500,
-    'privilege-card:8d': 3500,
-    'hair-service:men-cut': 4900,
-    'hair-service:men-beard': 3500,
-    'hair-service:men-cut-beard': 6900,
-    'hair-service:women-blowdry': 7900,
-    'hair-service:women-cut-blow': 9500,
-    'hair-service:women-evening': 8900,
-    'light-breakfast': 4900,
-    'brunch:opera': 6900,
-    'brunch:mare': 6900,
-    'luggage-transfer:smn': 5000,
-    'luggage-transfer:centro': 6000,
-    'luggage-transfer:airport': 9000,
-    'luggage-transfer:comune': 10000,
-    'luggage-transfer:oversized': 1500,
-    'celebration:romantic': 12900,
-    'celebration:signature': 21900,
-    'celebration:champagne': 27900,
-  };
-  for (const [sku, amount] of Object.entries(confirmed)) {
+/** What LunArt confirmed for itself, and what Bella Vigna starts from. */
+const LUNART_FIGURES = {
+  'transfer-airport': 9000,
+  'transfer-airport:oversized': 1500,
+  'privilege-card:2d': 1500,
+  'privilege-card:5d': 2500,
+  'privilege-card:8d': 3500,
+  'hair-service:men-cut': 4900,
+  'hair-service:men-beard': 3500,
+  'hair-service:men-cut-beard': 6900,
+  'hair-service:women-blowdry': 7900,
+  'hair-service:women-cut-blow': 9500,
+  'hair-service:women-evening': 8900,
+  'light-breakfast': 4900,
+  'brunch:opera': 6900,
+  'brunch:mare': 6900,
+  'luggage-transfer:smn': 5000,
+  'luggage-transfer:centro': 6000,
+  'luggage-transfer:airport': 9000,
+  'luggage-transfer:comune': 10000,
+  'luggage-transfer:oversized': 1500,
+  'celebration:romantic': 12900,
+  'celebration:signature': 21900,
+  'celebration:champagne': 27900,
+};
+
+test('every LunArt figure is carried at its amount, as a placeholder that says where it came from', () => {
+  for (const [sku, amount] of Object.entries(LUNART_FIGURES)) {
+    const price = resolvePrice(sku);
+    assert.equal(price.amount, amount, sku);
+    assert.equal(price.status, 'placeholder', `${sku} is not confirmed for Bella Vigna`);
+    assert.match(price.source, /LunArt/, `${sku} names its provenance`);
+    assert.equal(isSellable(sku), false, `${sku} must not sell on a production server`);
+    assert.equal(isSellable(sku, { allowPlaceholders: true }), true, `${sku} sells in the preview`);
+  }
+});
+
+test('a figure that still names LunArt as its source is never marked confirmed', () => {
+  // Confirming a price for Bella Vigna is one word in `commerce/prices.js`, and the
+  // provenance goes with it. A line reading "confirmed" with LunArt's name still on
+  // it would be a price nobody at Bella Vigna actually agreed.
+  const skus = lunartSourced();
+  assert.ok(skus.length >= Object.keys(LUNART_FIGURES).length + curatedWines().length,
+    'the whole catalogue and the whole wine list came from LunArt');
+  for (const sku of skus) {
+    assert.equal(resolvePrice(sku).status, 'placeholder', sku);
+  }
+  // Every figure in the list above is one of them.
+  for (const sku of Object.keys(LUNART_FIGURES)) assert.ok(skus.includes(sku), sku);
+});
+
+test('production settings refuse every LunArt-sourced price, and a preview allows them', async () => {
+  const skus = lunartSourced();
+  // The champagne upgrades are not written down: they are derived from two of the
+  // bottles above, so they inherit their status.
+  const upgrades = Object.values(CELEBRATION_UPGRADES).flat().map((id) => `celebration:upgrade-${id}`);
+
+  const production = await settingsUnder({
+    NODE_ENV: 'production', GUIDE_PREVIEW: '', ALLOW_PLACEHOLDER_PRICES: '',
+  });
+  assert.equal(production.mode, 'production');
+  assert.equal(production.allowPlaceholderPrices, false, 'off unless somebody asks for it');
+  for (const sku of [...skus, ...upgrades]) {
+    assert.equal(isSellable(sku, { allowPlaceholders: production.allowPlaceholderPrices }), false,
+      `${sku} would be charged on a production server`);
+  }
+
+  // The two ways a staging server is told to walk every purchase with test money.
+  for (const vars of [{ GUIDE_PREVIEW: '1' }, { GUIDE_PREVIEW: '', ALLOW_PLACEHOLDER_PRICES: '1' }]) {
+    const staging = await settingsUnder(vars);
+    assert.equal(staging.allowPlaceholderPrices, true, JSON.stringify(vars));
+    for (const sku of [...skus, ...upgrades]) {
+      assert.equal(isSellable(sku, { allowPlaceholders: staging.allowPlaceholderPrices }), true,
+        `${sku} under ${JSON.stringify(vars)}`);
+    }
+  }
+
+  // And LunArt's own variable names are not read at all: a Bella Vigna service set
+  // up by copying LunArt's environment stays a production server.
+  const copied = await settingsUnder({ GUIDE_PREVIEW: '', ALLOW_PLACEHOLDER_PRICES: '', LUNART_PREVIEW: '1' });
+  assert.equal(copied.allowPlaceholderPrices, false, 'LUNART_PREVIEW is not GUIDE_PREVIEW');
+});
+
+test('confirmed, LunArt’s figures sell on a production server at exactly those amounts', confirmed(() => {
+  for (const [sku, amount] of Object.entries(LUNART_FIGURES)) {
     const price = resolvePrice(sku);
     assert.equal(price.amount, amount, sku);
     assert.equal(price.status, 'confirmed', sku);
     assert.ok(isSellable(sku), `${sku} should sell on a production server`);
   }
-});
+}));
 
 test('the card ladder gets better value the longer it runs', () => {
   const perDay = (sku, days) => resolvePrice(sku).amount / days;
@@ -103,27 +220,52 @@ test('a price nobody has set never sells, however the server is configured', () 
   }
 });
 
-test('a bottle LunArt has priced sells at that price, and the rest fall back to the carta', () => {
+test('a bottle LunArt has priced carries that price, and the rest fall back to the carta', () => {
   for (const bottle of WINES) {
     const price = resolvePrice(`wine:${bottle.id}`);
     const own = WINE_PRICE_OVERRIDES[bottle.id];
+    // Unconfirmed either way: LunArt's selling price is not yet Bella Vigna's, and
+    // the carta figure is nobody's selling price at all.
+    assert.equal(price.status, 'placeholder', bottle.name);
     if (own) {
       assert.equal(price.amount, own.amount, bottle.name);
-      assert.equal(price.status, 'confirmed', bottle.name);
+      assert.match(price.source, /LunArt/, bottle.name);
     } else {
       assert.equal(price.amount, bottle.sourcePrice, bottle.name);
-      assert.equal(price.status, 'placeholder', bottle.name);
+      assert.match(price.source, /carta/, bottle.name);
     }
   }
 });
 
-test('every bottle on the guide’s list has a price LunArt confirmed', () => {
+test('confirming LunArt’s figures confirms the bottles LunArt priced, and no carta figure', confirmed(() => {
+  for (const bottle of WINES) {
+    const price = resolvePrice(`wine:${bottle.id}`);
+    if (WINE_PRICE_OVERRIDES[bottle.id]) {
+      assert.equal(price.status, 'confirmed', bottle.name);
+      assert.equal(price.amount, WINE_PRICE_OVERRIDES[bottle.id].amount, bottle.name);
+    } else {
+      assert.equal(price.status, 'placeholder', `${bottle.name} has only the carta figure`);
+    }
+  }
+}));
+
+test('every bottle on the guide’s list carries LunArt’s price, and sells only in the preview', () => {
+  for (const bottle of curatedWines()) {
+    const sku = `wine:${bottle.id}`;
+    assert.ok(WINE_PRICE_OVERRIDES[bottle.id], `${bottle.name} is offered without a selling price of its own`);
+    assert.equal(resolvePrice(sku).status, 'placeholder', bottle.name);
+    assert.equal(isSellable(sku), false, `${bottle.name} must not sell in production yet`);
+    assert.equal(isSellable(sku, { allowPlaceholders: true }), true, bottle.name);
+  }
+});
+
+test('confirmed, every bottle on the guide’s list sells on a production server', confirmed(() => {
   for (const bottle of curatedWines()) {
     const price = resolvePrice(`wine:${bottle.id}`);
     assert.equal(price.status, 'confirmed', `${bottle.name} is offered without a confirmed price`);
     assert.ok(isSellable(`wine:${bottle.id}`), bottle.name);
   }
-});
+}));
 
 test('the champagne upgrade is the difference between the bottles, not a typed-in number', () => {
   const moet = resolvePrice('wine:moet-chandon').amount;
@@ -131,10 +273,15 @@ test('the champagne upgrade is the difference between the bottles, not a typed-i
   const dom = resolvePrice('wine:dom-perignon').amount;
   assert.equal(resolvePrice('celebration:upgrade-ruinart-bdb').amount, ruinart - moet);
   assert.equal(resolvePrice('celebration:upgrade-dom-perignon').amount, dom - moet);
+  // Derived from two unconfirmed bottles, the upgrade is unconfirmed too.
+  assert.equal(resolvePrice('celebration:upgrade-dom-perignon').status, 'placeholder');
 
   // Move the wine price and the upgrade moves with it.
   applyPriceOverrides({ 'wine:ruinart-bdb': { amount: 40000, status: 'confirmed' } });
   assert.equal(resolvePrice('celebration:upgrade-ruinart-bdb').amount, 40000 - moet);
+  // Confirming one of the two bottles is not confirming the difference.
+  assert.equal(resolvePrice('celebration:upgrade-ruinart-bdb').status, 'placeholder',
+    'the Moët it is measured against is still a placeholder');
   applyPriceOverrides({});
 });
 
@@ -149,7 +296,20 @@ test('everything still waiting on a decision is listed', () => {
   assert.ok(gaps.length > 0);
   assert.ok(gaps.every((gap) => gap.status !== 'confirmed'));
   assert.ok(gaps.some((gap) => gap.sku === 'hair-service:ceremony'));
-  assert.ok(!gaps.some((gap) => gap.sku.startsWith('privilege-card')), 'the card is fully priced now');
+
+  // The card has an amount — LunArt's — and is still waiting, because nobody has
+  // confirmed that amount for Bella Vigna. The review screen shows both facts.
+  for (const variant of ['2d', '5d', '8d']) {
+    const gap = gaps.find((entry) => entry.sku === `privilege-card:${variant}`);
+    assert.ok(gap, `privilege-card:${variant} is waiting on a decision`);
+    assert.equal(gap.status, 'placeholder');
+    assert.equal(typeof gap.amount, 'number', 'with the figure it would sell at');
+    assert.match(gap.source, /LunArt/, 'and where that figure came from');
+  }
+  // As is every other figure carried over from LunArt.
+  for (const sku of lunartSourced()) {
+    assert.ok(gaps.some((gap) => gap.sku === sku), `${sku} is missing from the review`);
+  }
 });
 
 /* ── The client cannot name a price ──────────────────────────────────────── */
@@ -265,11 +425,11 @@ test('a bottle can still state its own notice, whatever the order is worth', () 
   assert.equal(leadMinutesFor(product, { id: 'z', leadTimeMinutes: 15 }, product.cutoff, { wineSubtotal: 0 }), 15);
 });
 
-test('ordering a bottle too late is refused', () => {
+test('ordering a bottle too late is refused', confirmed(() => {
   const now = new Date('2026-10-05T16:00:00Z');      // 18:00 in Florence
   // One Vermentino: 43 EUR, so twelve hours, so this evening is long gone.
   const late = priceCart(
-    [{ productId: 'wine-in-room', variantId: 'vermentino', quantity: 1, date: '2026-10-05', slotId: 'w-1900', room: '303' }],
+    [{ productId: 'wine-in-room', variantId: 'vermentino', quantity: 1, date: '2026-10-05', slotId: 'w-1900', room: ROOM }],
     { now },
   );
   assert.equal(late.ok, false);
@@ -277,27 +437,27 @@ test('ordering a bottle too late is refused', () => {
 
   // A basket over ninety euros is Express, and the ten o'clock window is still open.
   const inTime = priceCart(
-    [{ productId: 'wine-in-room', variantId: 'dom-perignon', quantity: 1, date: '2026-10-05', slotId: 'w-2000', room: '303' }],
+    [{ productId: 'wine-in-room', variantId: 'dom-perignon', quantity: 1, date: '2026-10-05', slotId: 'w-2000', room: ROOM }],
     { now },
   );
   assert.equal(inTime.ok, true, JSON.stringify(inTime.errors));
-});
+}));
 
-test('breakfast closes at noon the day before, Florence time', () => {
+test('breakfast closes at noon the day before, Florence time', confirmed(() => {
   const product = getProduct('brunch');
   const { deadline, kind } = cutoffFor(product, null, { date: '2026-10-06' });
   assert.equal(kind, 'dayBefore');
   assert.equal(deadline.toISOString(), propertyTimeToInstant('2026-10-05', '12:00').toISOString());
 
-  const base = { productId: 'brunch', variantId: 'opera', quantity: 1, date: '2026-10-06', slotId: 'b-0900', room: '303', options: { hotDrink: 'espresso' } };
+  const base = { productId: 'brunch', variantId: 'opera', quantity: 1, date: '2026-10-06', slotId: 'b-0900', room: ROOM, options: { hotDrink: 'espresso' } };
   const justInTime = validateLine(base, { now: new Date('2026-10-05T09:59:00Z') });   // 11:59 local
   const tooLate   = validateLine(base, { now: new Date('2026-10-05T10:01:00Z') });   // 12:01 local
   assert.equal(justInTime.ok, true, JSON.stringify(justInTime.errors));
   assert.equal(tooLate.ok, false);
   assert.ok(tooLate.errors.some((e) => e.code === 'past-cutoff'));
-});
+}));
 
-test('the light breakfast is two bowls and a juice, and brings no hot drink', () => {
+test('the light breakfast is two bowls and a juice, and brings no hot drink', confirmed(() => {
   const product = getProduct('light-breakfast');
   assert.equal(resolvePrice('light-breakfast').amount, 4900);
   assert.equal(product.maxGuests, 2);
@@ -307,11 +467,11 @@ test('the light breakfast is two bowls and a juice, and brings no hot drink', ()
   assert.ok(product.includes.en.some((item) => /juice/i.test(item)));
   // And it can still be bought by noon the day before.
   const ok = validateLine({
-    productId: 'light-breakfast', quantity: 1, date: '2026-10-06', slotId: 'b-0900', room: '303',
+    productId: 'light-breakfast', quantity: 1, date: '2026-10-06', slotId: 'b-0900', room: ROOM,
   }, { now: new Date('2026-10-05T09:00:00Z') });
   assert.equal(ok.ok, true, JSON.stringify(ok.errors));
   assert.equal(ok.amount, 4900);
-});
+}));
 
 test('the deadline is a wall clock in Florence, not UTC', () => {
   // Summer and winter give different instants for the same stated hour.
@@ -336,7 +496,7 @@ test('a line is checked for all of its requirements at once', () => {
 test('an option that is not on the menu is refused', () => {
   const result = validateLine({
     productId: 'brunch', variantId: 'opera', quantity: 1, date: soon(2),
-    slotId: 'b-0900', room: '303', options: { hotDrink: 'champagne' },
+    slotId: 'b-0900', room: ROOM, options: { hotDrink: 'champagne' },
   }, { now: NOW, allowPlaceholders: true });
   assert.equal(result.ok, false);
   assert.ok(result.errors.some((e) => e.code === 'option-invalid'));
@@ -347,7 +507,7 @@ const transferFields = (over = {}) => ({
   largeSuitcases: '2', trolleys: '2', personalBags: '2', phone: '+39392', ...over,
 });
 
-test('the transfer needs the details a driver actually needs', () => {
+test('the transfer needs the details a driver actually needs', confirmed(() => {
   const missing = validateLine({
     productId: 'transfer-airport', variantId: 'to-airport', quantity: 1, date: soon(5), time: '09:30',
   }, { now: NOW });
@@ -360,7 +520,7 @@ test('the transfer needs the details a driver actually needs', () => {
   }, { now: NOW });
   assert.equal(complete.ok, true, JSON.stringify(complete.errors));
   assert.equal(complete.amount, 9000);
-});
+}));
 
 test('the transfer carries five passengers at most', () => {
   const field = getProduct('transfer-airport').requiresFields.find((f) => f.id === 'passengers');
@@ -373,7 +533,7 @@ test('the transfer carries five passengers at most', () => {
   assert.ok(six.errors.some((e) => e.code === 'field-out-of-range' && e.field === 'passengers'));
 });
 
-test('an oversized case is fifteen euros, and the client only says how many', () => {
+test('an oversized case is fifteen euros, and the client only says how many', confirmed(() => {
   const one = validateLine({
     productId: 'transfer-airport', variantId: 'to-airport', quantity: 1, date: soon(5), time: '09:30',
     fields: transferFields({ oversizedItems: '1' }),
@@ -388,7 +548,7 @@ test('an oversized case is fifteen euros, and the client only says how many', ()
   assert.equal(two.amount, 9000 + 3000);
   assert.equal(two.surcharges[0].sku, 'transfer-airport:oversized');
   assert.equal(two.surcharges[0].unit, 1500, 'the price came from the table, not the payload');
-});
+}));
 
 test('a number field outside its range is refused', () => {
   const result = validateLine({
@@ -400,45 +560,45 @@ test('a number field outside its range is refused', () => {
 
 /* ── Luggage transfer ────────────────────────────────────────────────────── */
 
-test('the luggage transfer is priced by where it goes', () => {
+test('the luggage transfer is priced by where it goes', confirmed(() => {
   const expected = { smn: 5000, centro: 6000, airport: 9000, comune: 10000 };
   for (const [variantId, amount] of Object.entries(expected)) {
     const result = validateLine({
-      productId: 'luggage-transfer', variantId, quantity: 1, date: soon(3), time: '10:00', room: '303',
+      productId: 'luggage-transfer', variantId, quantity: 1, date: soon(3), time: '10:00', room: ROOM,
       fields: { contactName: 'Marta', address: 'Via dei Neri 4', largeSuitcases: '2', trolleys: '1', personalBags: '1', phone: '+39348' },
     }, { now: NOW });
     assert.equal(result.ok, true, `${variantId}: ${JSON.stringify(result.errors)}`);
     assert.equal(result.amount, amount, variantId);
   }
-});
+}));
 
-test('the luggage transfer closes at noon the day before and charges for oversized items', () => {
+test('the luggage transfer closes at noon the day before and charges for oversized items', confirmed(() => {
   const product = getProduct('luggage-transfer');
   assert.deepEqual(product.cutoff, { kind: 'dayBefore', hour: 12 });
 
   const withExtra = validateLine({
-    productId: 'luggage-transfer', variantId: 'airport', quantity: 1, date: '2026-10-06', time: '09:00', room: '303',
+    productId: 'luggage-transfer', variantId: 'airport', quantity: 1, date: '2026-10-06', time: '09:00', room: ROOM,
     fields: { contactName: 'Marta', address: 'Aeroporto', largeSuitcases: '3', trolleys: '2', personalBags: '2', oversizedItems: '2', phone: '+39348' },
   }, { now: new Date('2026-10-05T09:00:00Z') });
   assert.equal(withExtra.ok, true, JSON.stringify(withExtra.errors));
   assert.equal(withExtra.amount, 9000 + 3000);
 
   const tooLate = validateLine({
-    productId: 'luggage-transfer', variantId: 'airport', quantity: 1, date: '2026-10-06', time: '09:00', room: '303',
+    productId: 'luggage-transfer', variantId: 'airport', quantity: 1, date: '2026-10-06', time: '09:00', room: ROOM,
     fields: { contactName: 'Marta', address: 'Aeroporto', largeSuitcases: '1', trolleys: '0', personalBags: '0', phone: '+39348' },
   }, { now: new Date('2026-10-05T10:30:00Z') });
   assert.equal(tooLate.ok, false);
   assert.ok(tooLate.errors.some((e) => e.code === 'past-cutoff'));
-});
+}));
 
 /* ── Romantic and celebration ────────────────────────────────────────────── */
 
 const celebration = (over = {}) => ({
-  productId: 'celebration', variantId: 'romantic', quantity: 1, date: soon(3), room: '303',
+  productId: 'celebration', variantId: 'romantic', quantity: 1, date: soon(3), room: ROOM,
   options: { when: 'arrival', bottle: 'prosecco-cuvee' }, ...over,
 });
 
-test('the three celebration tiers are priced as confirmed', () => {
+test('the three celebration tiers are priced from the table, once confirmed', confirmed(() => {
   assert.equal(validateLine(celebration(), { now: NOW }).amount, 12900);
   assert.equal(validateLine(celebration({
     variantId: 'signature', options: { when: 'arrival', bottle: 'franciacorta-saten' },
@@ -446,7 +606,7 @@ test('the three celebration tiers are priced as confirmed', () => {
   assert.equal(validateLine(celebration({
     variantId: 'champagne', options: { when: 'arrival', bottle: 'moet-chandon' },
   }), { now: NOW }).amount, 27900);
-});
+}));
 
 test('a tier only offers the bottles it comes with', () => {
   // The Brunello is a real choice on the Signature tier, and not on the Romantic one.
@@ -459,7 +619,7 @@ test('a tier only offers the bottles it comes with', () => {
   assert.ok(unknown.errors.some((e) => e.code === 'option-invalid' && e.field === 'bottle'));
 });
 
-test('the champagne upgrade costs the difference between the bottles', () => {
+test('the champagne upgrade costs the difference between the bottles', confirmed(() => {
   const upgraded = validateLine(celebration({
     variantId: 'champagne',
     options: { when: 'arrival', bottle: 'moet-chandon', upgrade: 'dom-perignon' },
@@ -467,9 +627,9 @@ test('the champagne upgrade costs the difference between the bottles', () => {
   assert.equal(upgraded.ok, true, JSON.stringify(upgraded.errors));
   const difference = resolvePrice('wine:dom-perignon').amount - resolvePrice('wine:moet-chandon').amount;
   assert.equal(upgraded.amount, 27900 + difference);
-});
+}));
 
-test('a set-up during the stay needs a time, one before arrival does not', () => {
+test('a set-up during the stay needs a time, one before arrival does not', confirmed(() => {
   const during = validateLine(celebration({ options: { when: 'during', bottle: 'prosecco-cuvee' } }), { now: NOW });
   assert.equal(during.ok, false);
   assert.ok(during.errors.some((e) => e.code === 'slot-required'));
@@ -481,7 +641,7 @@ test('a set-up during the stay needs a time, one before arrival does not', () =>
 
   const onArrival = validateLine(celebration(), { now: NOW });
   assert.equal(onArrival.ok, true, JSON.stringify(onArrival.errors));
-});
+}));
 
 test('a requested set-up time runs from noon to nine, in half hours', () => {
   const slots = getProduct('celebration').deliverySlots;
@@ -490,12 +650,73 @@ test('a requested set-up time runs from noon to nine, in half hours', () => {
   assert.equal(slots.length, 18);
 });
 
-test('a celebration closes at noon the day before', () => {
+test('a celebration closes at noon the day before', confirmed(() => {
   const inTime = validateLine(celebration({ date: '2026-10-06' }), { now: new Date('2026-10-05T09:00:00Z') });
   const late = validateLine(celebration({ date: '2026-10-06' }), { now: new Date('2026-10-05T11:00:00Z') });
   assert.equal(inTime.ok, true, JSON.stringify(inTime.errors));
   assert.equal(late.ok, false);
   assert.ok(late.errors.some((e) => e.code === 'past-cutoff'));
+}));
+
+/* ── Bella Vigna, before anything is confirmed ───────────────────────────── */
+
+/**
+ * The same lines the tests above buy, as Bella Vigna's own servers see them today.
+ *
+ * Every one of them is complete and in time, so the only thing wrong with it is
+ * the price — which is exactly the point: production refuses it for that reason
+ * alone, and a preview sells it at LunArt's figure. If a line were refused for
+ * anything else here, the gate would be hiding a real fault behind the price.
+ */
+test('on Bella Vigna’s production settings a complete, timely line is refused for its price alone', () => {
+  const PRICE_ONLY = new Set(['price-not-confirmed', 'surcharge-not-priced']);
+  const cases = [
+    [line(), BRUNELLO],
+    [{ productId: 'brunch', variantId: 'opera', quantity: 1, date: soon(2), slotId: 'b-0900', room: ROOM, options: { hotDrink: 'espresso' } }, 6900],
+    [{ productId: 'light-breakfast', quantity: 1, date: soon(2), slotId: 'b-0900', room: ROOM }, 4900],
+    [{ productId: 'transfer-airport', variantId: 'to-airport', quantity: 1, date: soon(5), time: '09:30', fields: transferFields({ oversizedItems: '1' }) }, 9000 + 1500],
+    [{ productId: 'luggage-transfer', variantId: 'smn', quantity: 1, date: soon(3), time: '10:00', room: ROOM,
+      fields: { contactName: 'Marta', address: 'Via dei Neri 4', largeSuitcases: '1', trolleys: '0', personalBags: '0', phone: '+39348' } }, 5000],
+    [celebration(), 12900],
+  ];
+
+  for (const [raw, amount] of cases) {
+    const production = validateLine(raw, { now: NOW });
+    const label = `${raw.productId}${raw.variantId ? `:${raw.variantId}` : ''}`;
+    assert.equal(production.ok, false, `${label} sold on a production server`);
+    assert.ok(production.errors.some((e) => e.code === 'price-not-confirmed'), label);
+    assert.deepEqual(production.errors.filter((e) => !PRICE_ONLY.has(e.code)), [],
+      `${label} is refused for something other than its price`);
+    assert.equal(production.amount, 0, 'a refused line is worth nothing');
+
+    const preview = validateLine(raw, { now: NOW, allowPlaceholders: true });
+    assert.equal(preview.ok, true, `${label} in the preview: ${JSON.stringify(preview.errors)}`);
+    assert.equal(preview.amount, amount, `${label} at LunArt's figure`);
+  }
+});
+
+/**
+ * Privilege is the one line with a second gate: no venue honours the card at Bella
+ * Vigna yet, so the checkout refuses it even where placeholders are sold — the same
+ * rule the catalogue uses to hide it, enforced where the money is decided. With an
+ * agreement confirmed it falls back to the price gate like everything else.
+ */
+test('Privilege is refused at Bella Vigna for having no venue behind it, before its price is even asked', () => {
+  const raw = { productId: 'privilege-card', variantId: '2d', quantity: 1, date: soon(1), fields: { holderName: 'Marta Venturi' } };
+  for (const allowPlaceholders of [false, true]) {
+    const result = validateLine(raw, { now: NOW, allowPlaceholders });
+    assert.equal(result.ok, false);
+    assert.ok(result.errors.some((e) => e.code === 'not-on-sale' && e.reason === 'no-card-partner'), JSON.stringify(result.errors));
+  }
+  confirmAllAgreements();
+  const restore = restoreAgreements;
+  try {
+    const production = validateLine(raw, { now: NOW });
+    assert.deepEqual(production.errors.map((e) => e.code), ['price-not-confirmed']);
+    const preview = validateLine(raw, { now: NOW, allowPlaceholders: true });
+    assert.equal(preview.ok, true, JSON.stringify(preview.errors));
+    assert.equal(preview.amount, 1500, 'at LunArt’s figure');
+  } finally { restore(); }
 });
 
 test('things not on sale cannot be bought', () => {
@@ -503,7 +724,7 @@ test('things not on sale cannot be bought', () => {
   assert.equal(coming.ok, false);
   assert.ok(coming.errors.some((e) => e.code === 'not-on-sale'));
 
-  const onRequest = validateLine({ productId: 'sunrise-breakfast', quantity: 1, date: soon(3), room: '303' }, { now: NOW, allowPlaceholders: true });
+  const onRequest = validateLine({ productId: 'sunrise-breakfast', quantity: 1, date: soon(3), room: ROOM }, { now: NOW, allowPlaceholders: true });
   assert.equal(onRequest.ok, false);
   assert.ok(onRequest.errors.some((e) => e.code === 'request-only'));
 });
@@ -522,7 +743,7 @@ test('a basket of several different things adds up', () => {
   const cart = priceCart([
     line(),                                                   // Brunello, 70
     line({ variantId: 'vermentino', slotId: 'w-2000' }),      // Vermentino, 34
-    { productId: 'brunch', variantId: 'opera', quantity: 1, date: soon(2), slotId: 'b-0900', room: '303', options: { hotDrink: 'espresso' } },
+    { productId: 'brunch', variantId: 'opera', quantity: 1, date: soon(2), slotId: 'b-0900', room: ROOM, options: { hotDrink: 'espresso' } },
   ], { now: NOW, allowPlaceholders: true });
 
   assert.equal(cart.ok, true, JSON.stringify(cart.errors));
@@ -584,6 +805,8 @@ test('every variant resolves to a SKU the pricing table knows about', () => {
 test('the wine selection is a subset of the carta, and on sale', () => {
   const curated = curatedWines();
   assert.equal(curated.length, 14, 'exactly the bottles LunArt has priced');
+  // "On sale" is the bottle's own flag. Whether its price may be charged is the
+  // price table's question, answered above.
   assert.ok(curated.length < WINES.length, 'curated, not the whole list');
   for (const bottle of curated) {
     assert.equal(bottle.available, true);
@@ -613,20 +836,40 @@ test('partner benefits are not assumed to be a house percentage', () => {
   }
   for (const partner of activePartners()) {
     assert.notEqual(partner.example, true, 'an example must never be active');
+    // At Bella Vigna no agreement is confirmed yet, so no live venue promises
+    // anything: the benefit shapes above belong to the model, not to a guest.
+    assert.deepEqual(partner.benefits, [], `${partner.partner_id} promises a benefit nobody agreed for Bella Vigna`);
   }
   assert.equal(partnerView('example-bar'), null, 'inactive partners give nothing');
 });
 
-test('every partner with a benefit has its own scanner page, and no other does', () => {
+/** Every venue with a benefit has a scanner page, and every venue without one has none. */
+function assertScannerPages() {
   for (const partner of benefitPartners()) {
     assert.equal(validationPath(partner.partner_id), `/partner/${partner.partner_id}`);
     const view = partnerView(partner.partner_id, 'https://guide.example');
     assert.equal(view.validation_url, `https://guide.example/partner/${partner.partner_id}`);
   }
-  // A venue LunArt has not agreed terms with has no door to check a card against.
+  // A venue with no agreement for this property has no door to check a card against.
   for (const partner of activatingPartners()) {
     assert.equal(partnerView(partner.partner_id, 'https://guide.example').validation_url, null,
       partner.partner_id);
+  }
+}
+
+test('at Bella Vigna no venue has a scanner page yet, because no agreement is confirmed', () => {
+  assert.equal(benefitPartners().length, 0, 'nothing a venue could be asked to honour');
+  assert.ok(activatingPartners().length > 0, 'the network is shown, in attivazione');
+  assertScannerPages();
+});
+
+test('once agreements are confirmed, every partner with a benefit has its own scanner page, and no other does', () => {
+  confirmAllAgreements();
+  try {
+    assert.ok(benefitPartners().length > 0, 'the agreements LunArt holds, as if they covered Bella Vigna');
+    assertScannerPages();
+  } finally {
+    restoreAgreements();
   }
 });
 
@@ -639,6 +882,9 @@ test('internal partner notes never reach a guest or a venue', () => {
     assert.equal('example' in view, false, partner.partner_id);
     assert.equal(JSON.stringify(view).includes('listino'), false,
       'the house prices behind a negotiation are not a guest-facing price table');
+    // The internal note on a venue in attivazione says whose agreement it really
+    // is. That is for the operator: a Bella Vigna guest is never told about LunArt.
+    assert.equal(JSON.stringify(view).includes('LunArt'), false, partner.partner_id);
   }
 });
 

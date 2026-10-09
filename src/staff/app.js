@@ -49,7 +49,7 @@ function writeToken(token) {
   } catch { /* private mode: it will work for this session */ }
 }
 
-import { roomsIn, roomList } from '../../commerce/rooms.js';
+import { roomsIn, roomList, ROOM_IDS } from '../../commerce/rooms.js';
 import { brand, storageKey } from '../../data/brand.js';
 
 const esc = (value) => String(value ?? '').replace(/[&<>"']/g,
@@ -397,7 +397,7 @@ async function renderReservations() {
         <label class="field"><span class="field__label">Camera</span>
           <select name="room">
             <option value="">—</option>
-            ${['301', '302', '303', '304', '305'].map((room) => `<option value="${room}">${room}</option>`).join('')}
+            ${ROOM_IDS.map((room) => `<option value="${esc(room)}">${esc(room)}</option>`).join('')}
           </select>
         </label>
         <label class="field"><span class="field__label">N. prenotazione</span><input name="booking_reference"></label>

@@ -1,10 +1,10 @@
 /**
  * The network: who LunArt works with, and who it is still arranging to work with.
  *
- * Thirty-two businesses are published and three of them have an agreement. The
- * other twenty-nine are real places with real names that LunArt is talking to, and
- * the only honest thing to say about them is that there is nothing to claim yet —
- * so these tests are mostly about that nothing staying nothing.
+ * Thirty-two businesses are published and, for LunArt, three of them have an
+ * agreement. The other twenty-nine are real places with real names that LunArt is
+ * talking to, and the only honest thing to say about them is that there is nothing
+ * to claim yet — so these tests are mostly about that nothing staying nothing.
  *
  * The hazard is not malice, it is convenience: a future selector that reaches for
  * `activePartners()` because it is the obvious one, and quietly puts a business
@@ -14,6 +14,16 @@
  * The second hazard is the opposite of nothing: an invented percentage, a borrowed
  * address, somebody's phone number. A business being set up carries its name, what
  * it is, and where it is when that is certain. Nothing else.
+ *
+ * ── Bella Vigna ─────────────────────────────────────────────────────────────
+ *
+ * Bella Vigna publishes the same thirty-two, and for Bella Vigna not one of the
+ * three agreements is confirmed yet (`PROPERTY_AGREEMENTS`): Opera Caffè, Le Firme
+ * and Blue Velvet are published as being set up like everybody else. So the real
+ * register is all thirty-two on the quiet side of the turn, and that is asserted as
+ * it is. The firewall and the ordering are also asserted under `confirmed()` — the
+ * network as LunArt agreed it, through the same seam the server uses — because the
+ * day an agreement is confirmed they must simply work.
  */
 
 import test from 'node:test';
@@ -21,11 +31,11 @@ import assert from 'node:assert/strict';
 import { readFile, stat } from 'node:fs/promises';
 
 import {
-  PARTNERS, PARTNERSHIP_STATUS, PARTNER_CATEGORIES, INTERNAL_PARTNER_FIELDS,
+  NETWORK, PARTNERS, PARTNERSHIP_STATUS, PARTNER_CATEGORIES, INTERNAL_PARTNER_FIELDS,
   statusOf, activePartners, benefitPartners, activatingPartners,
   cardPartners, stayPartners, cardBenefits, stayBenefits, allGuestBenefits,
-  partnerNetwork, partnerView, publicPartners, applyPartners, partnersRequiring,
-  ENTITLEMENTS, directionsUrl,
+  partnerNetwork, partnerView, benefitPartnerView, publicPartner, publicPartners,
+  applyPartners, partnersRequiring, ENTITLEMENTS, directionsUrl,
 } from '../commerce/partners.js';
 import { PRODUCTS } from '../commerce/catalog.js';
 import { isPurchasable } from '../commerce/index.js';
@@ -33,18 +43,50 @@ import { createStore } from '../server/store.js';
 import { buildCard, currentCode, validateCode, cardState } from '../server/card.js';
 import { networkSection, privilegeSection } from '../src/commerce/ui/partners.js';
 import { UI } from '../src/i18n.js';
+import { brand } from '../data/brand.js';
+import {
+  asIfConfirmed, confirmAllPrices, restoreAgreements, restorePrices,
+} from './support/property.mjs';
 
 const KEY = 'a-network-test-signing-key-that-never-leaves';
+/** The register in force for Bella Vigna. */
 const byId = (id) => PARTNERS.find((p) => p.partner_id === id);
+/** The same venue as LunArt agreed it. */
+const agreed = (id) => NETWORK.find((p) => p.partner_id === id);
 const count = (html, needle) => html.split(needle).length - 1;
+
+/** The venues LunArt has a benefit with: the ones whose agreement Bella Vigna is waiting on. */
+const AGREED_IDS = NETWORK
+  .filter((p) => p.active && statusOf(p) === PARTNERSHIP_STATUS.active && p.benefits?.length)
+  .map((p) => p.partner_id);
+
+/**
+ * A test about the mechanism rather than about Bella Vigna's terms: every LunArt
+ * agreement and price confirmed for the body, the real register put back after.
+ */
+const confirmed = (body) => async (t) => {
+  const restore = asIfConfirmed();
+  try {
+    return await body(t);
+  } finally {
+    restore();
+  }
+};
 
 /* ── The register ────────────────────────────────────────────────────────── */
 
-test('three agreements, and a network being built around them', () => {
+test('on Bella Vigna\'s register all thirty-two are being set up, and none is agreed yet', () => {
+  assert.deepEqual(AGREED_IDS, ['opera-caffe', 'le-firme', 'blue-velvet'], 'LunArt\'s three');
+  assert.deepEqual(benefitPartners(), [], 'none of them confirmed for Bella Vigna');
+  assert.equal(activatingPartners().length, 32);
+  assert.equal(activePartners().length, 32, 'all of them published');
+});
+
+test('three agreements, and a network being built around them', confirmed(() => {
   assert.deepEqual(benefitPartners().map((p) => p.partner_id), ['opera-caffe', 'le-firme', 'blue-velvet']);
   assert.equal(activatingPartners().length, 29);
   assert.equal(activePartners().length, 32, 'all of them published');
-});
+}));
 
 test('partnership status is its own field, and not the publication flag', () => {
   for (const partner of PARTNERS) {
@@ -58,20 +100,82 @@ test('partnership status is its own field, and not the publication flag', () => 
   assert.equal(statusOf(null), PARTNERSHIP_STATUS.activating);
 });
 
-test('every business being set up carries facts and promises nothing', () => {
+/**
+ * Facts, and no promise. The marks are the one difference between the two kinds
+ * of business on the quiet side: a venue LunArt already works with keeps the mark
+ * it supplied, because the mark is a fact about the business; one LunArt is only
+ * talking to has supplied none.
+ */
+const promisesNothing = () => {
   for (const partner of activatingPartners()) {
     assert.ok(partner.name?.trim(), partner.partner_id);
     assert.ok(Object.keys(PARTNER_CATEGORIES).includes(partner.category), partner.partner_id);
     assert.deepEqual(partner.benefits, [], `${partner.partner_id} carries a benefit`);
     assert.equal(partner.eligibility, undefined, `${partner.partner_id} carries an eligibility rule`);
-    assert.equal(partner.logo, null, 'no official asset has been supplied for these yet');
+    assert.deepEqual(partner.logo, agreed(partner.partner_id).logo ?? null,
+      AGREED_IDS.includes(partner.partner_id)
+        ? 'the mark the venue supplied, and nothing else'
+        : 'no official asset has been supplied for these yet');
 
     // Nothing that reads as a commercial term in anything a guest is shown. The
     // map link is excluded: its percent-encoding is full of `%` and says nothing.
     const view = partnerView(partner.partner_id);
     const words = JSON.stringify({ ...view, directions_url: null, maps: null });
-    assert.equal(/\d\s*%|sconto|discount|gratis|omaggio|minimo|minimum/i.test(words), false,
+    assert.equal(/\d\s*%|sconto|discount|gratis|omaggio|minimo|minimum|€|max/i.test(words), false,
       `${partner.partner_id} reads like an offer`);
+  }
+};
+
+test('every business being set up carries facts and promises nothing', () => {
+  assert.equal(activatingPartners().length, 32);
+  promisesNothing();
+});
+
+test('and so does every one LunArt is still only talking to', confirmed(() => {
+  assert.equal(activatingPartners().length, 29);
+  promisesNothing();
+}));
+
+test('every venue LunArt has a benefit with is published here as being set up, with nothing leaking', () => {
+  for (const id of AGREED_IDS) {
+    const network = agreed(id);
+    const here = byId(id);
+
+    // What the business is, unchanged.
+    assert.equal(here.partnership_status, PARTNERSHIP_STATUS.activating, id);
+    assert.equal(here.active, true, `${id} is still published`);
+    for (const field of ['name', 'category', 'address', 'area', 'logo']) {
+      assert.deepEqual(here[field] ?? null, network[field] ?? null, `${id}.${field}`);
+    }
+    // What LunArt agreed, gone: no benefit, no rule, no scope.
+    assert.deepEqual(here.benefits, [], id);
+    assert.equal(here.eligibility, undefined, id);
+    assert.equal(here.applies_to, undefined, id);
+    // And why, recorded internally, as a blocker.
+    assert.equal(here.verify?.level, 'blocker', id);
+
+    // No internal field on either route a guest can reach.
+    const wire = publicPartner(here);
+    const view = partnerView(id, 'https://guide.example');
+    for (const field of INTERNAL_PARTNER_FIELDS) {
+      assert.equal(field in wire, false, `${id}: the register on the wire carries ${field}`);
+      assert.equal(field in view, false, `${id}: the guest view carries ${field}`);
+    }
+    assert.deepEqual(view.benefits, [], id);
+    assert.equal(view.partnership_status, PARTNERSHIP_STATUS.activating, id);
+    assert.equal(view.validation_url, null, `${id} has no scanner page`);
+    assert.equal(benefitPartnerView(id), null, `${id} has no scanner view`);
+
+    // And none of LunArt's terms survive in anything published, in any form.
+    const published = JSON.stringify({ ...wire, maps: null }) + JSON.stringify({ ...view, directions_url: null, maps: null });
+    for (const benefit of network.benefits) {
+      for (const term of [benefit.emphasis, benefit.headline.it, benefit.headline.en]) {
+        assert.equal(published.includes(term), false, `${id} still shows "${term}"`);
+      }
+    }
+    for (const secret of [network.notes, here.notes, here.verify.note]) {
+      if (secret) assert.equal(published.includes(secret.slice(0, 36)), false, `${id} leaks a note`);
+    }
   }
 });
 
@@ -79,11 +183,12 @@ test('the ones excluded on purpose are not in the register', () => {
   // No "Buca" — which one it was is still being remembered, and the wrong Buca
   // is a different restaurant with somebody else's name on it.
   assert.equal(PARTNERS.some((p) => /buca/i.test(p.name)), false);
+  assert.equal(NETWORK.some((p) => /buca/i.test(p.name)), false);
 });
 
 /* ── The firewall ────────────────────────────────────────────────────────── */
 
-test('a business being set up cannot reach any claimable list', () => {
+const firewallHolds = () => {
   const ids = new Set(activatingPartners().map((p) => p.partner_id));
 
   for (const [label, list] of [
@@ -99,9 +204,22 @@ test('a business being set up cannot reach any claimable list', () => {
     assert.ok(views.every((v) => v.partnership_status === PARTNERSHIP_STATUS.active), label);
   }
   assert.equal(partnersRequiring(ENTITLEMENTS.privilege).some((p) => ids.has(p.partner_id)), false);
+};
+
+test('a business being set up cannot reach any claimable list', () => {
+  // Bella Vigna, today: thirty-two on the quiet side, and every claimable list empty.
+  firewallHolds();
+  for (const list of [cardPartners(), stayPartners(), cardBenefits(), stayBenefits(), allGuestBenefits()]) {
+    assert.deepEqual(list, []);
+  }
 });
 
-test('and has no access state at all, because it has nothing to have one about', () => {
+test('nor can one once the agreements around it are confirmed', confirmed(() => {
+  assert.equal(allGuestBenefits().length, 3, 'there is a claimable list to keep them out of');
+  firewallHolds();
+}));
+
+const noAccessState = () => {
   for (const pass of [
     { state: 'active', entitlements: [], live_entitlements: [] },
     { state: 'active', entitlements: ['privilege'], live_entitlements: ['privilege'] },
@@ -111,9 +229,14 @@ test('and has no access state at all, because it has nothing to have one about',
       assert.equal(html.includes(`data-partner="${partner.partner_id}"`), false, partner.partner_id);
     }
   }
+};
+
+test('and has no access state at all, because it has nothing to have one about', async () => {
+  noAccessState();
+  await confirmed(noAccessState)();
 });
 
-test('an active Privilege card validates at a real partner and nowhere else', async () => {
+test('an active Privilege card validates at a real partner and nowhere else', confirmed(async () => {
   const store = createStore();
   const card = await store.cards.create(buildCard({
     orderId: 'o', holderName: 'Ada', startDate: '2026-11-07', days: 2, variantId: '2d', signingKey: KEY,
@@ -137,55 +260,114 @@ test('an active Privilege card validates at a real partner and nowhere else', as
   assert.equal(soon.partner, null, 'a scanner is told of no benefit it could honour');
   assert.equal(soon.benefits.some((v) => v.partner_id === 'la-petite'), false);
   assert.ok(soon.benefits.every((v) => v.partnership_status === PARTNERSHIP_STATUS.active));
+}));
+
+test('on Bella Vigna\'s register a live card is told of no benefit at any door', async () => {
+  // The card itself is good — that is a fact about the card — and there is nothing
+  // a venue could honour with it, LunArt's three included.
+  const store = createStore();
+  const card = await store.cards.create(buildCard({
+    orderId: 'o', holderName: 'Ada', startDate: '2026-11-07', days: 2, variantId: '2d', signingKey: KEY,
+  }));
+  const now = new Date('2026-11-07T20:00:00Z');
+  const { code } = currentCode(card, { signingKey: KEY, periodSeconds: 60, now });
+
+  for (const partnerId of [...AGREED_IDS, 'la-petite', null]) {
+    const result = await validateCode({
+      reference: card.public_ref, code, store, signingKey: KEY, periodSeconds: 60, now, partnerId,
+    });
+    assert.equal(result.valid, true, `${partnerId}: the card is not what is missing`);
+    assert.equal(result.partner, null, `${partnerId}: no benefit to show`);
+    assert.deepEqual(result.benefits, [], `${partnerId}: and no list to pick from`);
+  }
 });
 
 test('a register of nothing but businesses being set up does not make Privilege sellable', () => {
   const card = PRODUCTS.find((p) => p.id === 'privilege-card');
-  const saved = PARTNERS.map((p) => ({ ...p }));
+
+  // That register is Bella Vigna's today: thirty-two venues, every one of them
+  // published and visible, and not one of them an agreement. The rail must read
+  // this as an empty shelf, even on a preview that allows placeholder prices.
+  assert.equal(activePartners().length, 32, 'they are all still published');
+  assert.equal(cardPartners().length, 0, 'and none of them is a reason to sell anything');
+  assert.equal(isPurchasable(card, { allowPlaceholders: true }), false);
+
   try {
-    // Twenty-nine venues, every one of them published and visible, and not one of
-    // them an agreement. The rail must read this as an empty shelf.
-    applyPartners(saved.filter((p) => statusOf(p) === PARTNERSHIP_STATUS.activating));
-    assert.equal(activePartners().length, 29, 'they are all still published');
-    assert.equal(cardPartners().length, 0, 'and none of them is a reason to sell anything');
-    assert.equal(isPurchasable(card, { allowPlaceholders: true }), false);
+    // With every price confirmed, so the register is the only thing being asked.
+    confirmAllPrices();
+    assert.equal(isPurchasable(card), false, 'a confirmed price does not make a shelf');
+
+    // LunArt's register, minus its agreements, is the same empty shelf.
+    applyPartners(NETWORK.filter((p) => statusOf(p) === PARTNERSHIP_STATUS.activating));
+    assert.equal(activePartners().length, 29);
+    assert.equal(cardPartners().length, 0);
+    assert.equal(isPurchasable(card), false);
 
     // Opera Caffè alone is not either: it is a stay benefit, not a card one.
-    applyPartners(saved.filter((p) => p.partner_id === 'opera-caffe'));
+    applyPartners(NETWORK.filter((p) => p.partner_id === 'opera-caffe'));
     assert.equal(cardPartners().length, 0);
-    assert.equal(isPurchasable(card, { allowPlaceholders: true }), false);
+    assert.equal(isPurchasable(card), false);
+
+    // The two card venues are what make it worth selling.
+    applyPartners(NETWORK);
+    assert.deepEqual(cardPartners().map((p) => p.partner_id), ['le-firme', 'blue-velvet']);
+    assert.equal(isPurchasable(card), true);
   } finally {
-    applyPartners(saved);
+    restoreAgreements();
+    restorePrices();
   }
-  assert.deepEqual(cardPartners().map((p) => p.partner_id), ['le-firme', 'blue-velvet']);
-  assert.equal(isPurchasable(card), true);
+  assert.equal(isPurchasable(card, { allowPlaceholders: true }), false, 'and back to Bella Vigna');
 });
 
 /* ── What is unchanged ───────────────────────────────────────────────────── */
 
-test('Opera Caffè is still the stay benefit, at thirty per cent, outside Privilege', () => {
-  const opera = byId('opera-caffe');
+test('Opera Caffè is still the stay benefit, at thirty per cent, outside Privilege', confirmed(() => {
+  const opera = agreed('opera-caffe');
   assert.equal(statusOf(opera), PARTNERSHIP_STATUS.active);
   assert.equal(opera.applies_to, 'all-guests');
   assert.deepEqual(opera.eligibility.entitlementsAll, []);
   assert.equal(opera.benefits[0].value, 30);
   assert.equal(opera.benefits[0].headline.it, '30% sul menù al tavolo');
+  // The confirmation the guest shows is this property's, not LunArt's.
+  assert.ok(opera.benefits[0].note.it.includes(`conferma di prenotazione ${brand.name}`));
 
   assert.ok(stayPartners().some((p) => p.partner_id === 'opera-caffe'));
   assert.equal(cardPartners().some((p) => p.partner_id === 'opera-caffe'), false);
-});
+}));
 
 test('Le Firme and Blue Velvet keep their economics exactly', () => {
-  assert.deepEqual(byId('le-firme').benefits.map((b) => b.emphasis), ['10% OFF']);
-  assert.deepEqual(byId('blue-velvet').benefits.map((b) => b.emphasis), ['€15 MAX + DRINK', '20% OFF']);
-  assert.equal(byId('blue-velvet').benefits[0].cap.amount, 1500);
+  // As LunArt agreed them, ready for the day Bella Vigna confirms the same.
+  assert.deepEqual(agreed('le-firme').benefits.map((b) => b.emphasis), ['10% OFF']);
+  assert.deepEqual(agreed('blue-velvet').benefits.map((b) => b.emphasis), ['€15 MAX + DRINK', '20% OFF']);
+  assert.equal(agreed('blue-velvet').benefits[0].cap.amount, 1500);
   assert.equal(PARTNERS.filter((p) => /blue\s*velvet/i.test(p.name)).length, 1, 'still one venue');
   assert.equal(partnerView('blue-velvet').address, 'Via del Castello d\'Altafronte 14R–16R, Firenze');
 });
 
 /* ── Order, and the one turn in it ───────────────────────────────────────── */
 
-test('the network is one list: what works, one turn, then what is being set up', () => {
+test('on Bella Vigna\'s register the whole network sits after the turn, in its curated order', () => {
+  const views = partnerNetwork();
+  assert.equal(views.length, 32);
+  assert.ok(views.every((v) => v.partnership_status === PARTNERSHIP_STATUS.activating));
+  // Nothing re-sorted: LunArt's three keep their place at the head of the list,
+  // on the quiet side of it until their agreement holds here.
+  assert.deepEqual(views.map((v) => v.partner_id),
+    NETWORK.filter((p) => p.active).map((p) => p.partner_id));
+  assert.deepEqual(views.slice(0, 3).map((v) => v.partner_id), AGREED_IDS);
+  assert.equal(views.at(-1).partner, 'Sartoria Rossi');
+
+  for (const lang of ['it', 'en']) {
+    const html = networkSection(views, lang);
+    assert.equal(count(html, 'data-network-turn'), 1, `${lang}: one turn, and it leads`);
+    const [before, after] = html.split('data-network-turn');
+    assert.equal(count(before, 'class="partner partner--network"'), 0, 'nothing reads as agreed');
+    assert.equal(count(after, 'data-status="activating"'), 32);
+    assert.equal(count(html, 'data-status="active"'), 0);
+  }
+});
+
+test('the network is one list: what works, one turn, then what is being set up', confirmed(() => {
   const views = partnerNetwork();
   assert.equal(views.length, 32);
 
@@ -196,12 +378,12 @@ test('the network is one list: what works, one turn, then what is being set up',
   assert.ok(views.slice(turn).every((v) => v.partnership_status === PARTNERSHIP_STATUS.activating));
 
   // The curated order is the register's, kept rather than sorted.
-  assert.deepEqual(views.slice(3, 7).map((v) => v.partner), 
+  assert.deepEqual(views.slice(3, 7).map((v) => v.partner),
     ['Babylon Club', 'La Petite', 'Bitter Bar', 'Giotto Pizzeria-Bistrot']);
   assert.equal(views.at(-1).partner, 'Sartoria Rossi');
-});
+}));
 
-test('the rendered list has exactly one transition in it', () => {
+test('the rendered list has exactly one transition in it', confirmed(() => {
   for (const lang of ['it', 'en']) {
     const html = networkSection(partnerNetwork(), lang);
     assert.equal(count(html, 'data-network-turn'), 1, lang);
@@ -215,12 +397,35 @@ test('the rendered list has exactly one transition in it', () => {
     assert.equal(count(after, 'data-status="activating"'), 29);
   }
   assert.equal(networkSection([], 'it'), '');
+}));
+
+test('confirming one agreement moves exactly that venue above the turn', () => {
+  try {
+    // The register as it would stand with Le Firme's agreement confirmed for Bella
+    // Vigna and nothing else: its LunArt record, everyone else as they are today.
+    applyPartners(NETWORK.map((p) => (p.partner_id === 'le-firme' ? p : byId(p.partner_id))));
+
+    const views = partnerNetwork();
+    assert.deepEqual(views.filter((v) => v.partnership_status === PARTNERSHIP_STATUS.active)
+      .map((v) => v.partner_id), ['le-firme']);
+
+    const html = networkSection(views, 'it');
+    const [before, after] = html.split('data-network-turn');
+    assert.equal(count(html, 'data-network-turn'), 1);
+    assert.equal(count(before, 'data-status="active"'), 1);
+    assert.ok(before.includes('data-partner="le-firme"'));
+    assert.equal(count(after, 'data-status="activating"'), 31);
+    assert.ok(after.includes('data-partner="blue-velvet"') && after.includes('data-partner="opera-caffe"'),
+      'the other two are still waiting on theirs');
+  } finally {
+    restoreAgreements();
+  }
 });
 
-test('a business being set up says so, and is offered nothing', () => {
+const offeredNothing = (expected) => {
   for (const lang of ['it', 'en']) {
     const html = networkSection(partnerNetwork(), lang);
-    assert.equal(count(html, UI[lang].partnerComingSoon), 29, 'one badge each');
+    assert.equal(count(html, UI[lang].partnerComingSoon), expected, 'one badge each');
     assert.equal(count(html, 'partner__lock'), 0, 'no padlock anywhere');
     assert.equal(count(html, 'data-product='), 0, 'and nothing to buy');
     for (const word of [UI[lang].privilegeGet, UI[lang].openCard, UI[lang].privilegeLocked]) {
@@ -230,21 +435,37 @@ test('a business being set up says so, and is offered nothing', () => {
     assert.equal(/\d+\s*%/.test(html.replace(/href="[^"]*"/g, '')), false,
       'and no percentage was invented');
   }
+};
+
+test('a business being set up says so, and is offered nothing', async () => {
+  offeredNothing(32);
+  await confirmed(() => offeredNothing(29))();
 });
 
 /* ── Where a guest is sent, and where they are not ───────────────────────── */
 
-test('directions exist where the address does, and nowhere else', () => {
+const directionsHonest = (expected) => {
   const withPin = activatingPartners().filter((p) => partnerView(p.partner_id).directions_url);
   const without = activatingPartners().filter((p) => !partnerView(p.partner_id).directions_url);
 
-  assert.equal(withPin.length + without.length, 29);
+  assert.equal(withPin.length + without.length, expected);
   assert.ok(withPin.length >= 15 && without.length >= 10, `${withPin.length} / ${without.length}`);
 
   for (const partner of withPin) {
     assert.ok(partner.address?.includes('Firenze'), partner.partner_id);
     assert.ok(partnerView(partner.partner_id).directions_url.includes(encodeURIComponent(partner.address)));
   }
+};
+
+test('directions exist where the address does, and nowhere else', async () => {
+  directionsHonest(32);
+  // Being set up for Bella Vigna does not cost a venue its address: Le Firme and
+  // Blue Velvet still send a guest to the door.
+  for (const id of ['le-firme', 'blue-velvet']) {
+    assert.ok(partnerView(id).directions_url.includes(encodeURIComponent(agreed(id).address)), id);
+  }
+  await confirmed(() => directionsHonest(29))();
+
   // A brand with no confirmed branch gets its name and no pin: a wrong pin sends a
   // guest across Florence, which is worse than none.
   for (const id of ['erbolario', 'alessi', 'osteria-fulvio', 'caffe-maioli', 'pasquinucci', 'tre-panche']) {
@@ -266,7 +487,7 @@ test('the named branches are the named branches', () => {
 /* ── Logos ───────────────────────────────────────────────────────────────── */
 
 test('an official mark is served from here, never from somebody else', () => {
-  for (const partner of PARTNERS) {
+  for (const partner of [...PARTNERS, ...NETWORK]) {
     if (!partner.logo) continue;
     assert.equal(/^https?:\/\//.test(partner.logo.src), false, `${partner.partner_id} hotlinks`);
     assert.match(partner.logo.src, /^assets\/img\/partners\//, partner.partner_id);
@@ -297,7 +518,8 @@ test('a logo never replaces a name, and a partner without one still has a card',
   for (const lang of ['it', 'en']) {
     const html = networkSection(partnerNetwork(), lang);
 
-    // The two that have marks show both the mark and the words.
+    // The two that have marks show both the mark and the words — on Bella Vigna's
+    // register too, where they are being set up.
     assert.ok(html.includes('assets/img/partners/opera-caffe-400.webp'));
     assert.ok(html.includes('L’Opera Caffè'), 'and its name in text');
     assert.ok(html.includes('assets/img/partners/blue-velvet.svg'));
@@ -318,13 +540,19 @@ test('a logo never replaces a name, and a partner without one still has a card',
 
 /* ── Internal data ───────────────────────────────────────────────────────── */
 
-test('no contact, no negotiation note and no uncertainty reaches a guest', () => {
+/** Everything written in an internal field, in either register. */
+const internalStrings = () => {
   const secrets = [];
   const walk = (v) => {
     if (typeof v === 'string' && v.trim().length > 10) secrets.push(v.trim());
     else if (v && typeof v === 'object') Object.values(v).forEach(walk);
   };
-  for (const partner of PARTNERS) for (const f of INTERNAL_PARTNER_FIELDS) walk(partner[f]);
+  for (const partner of [...PARTNERS, ...NETWORK]) for (const f of INTERNAL_PARTNER_FIELDS) walk(partner[f]);
+  return secrets;
+};
+
+const nothingInternalReachesAGuest = () => {
+  const secrets = internalStrings();
   assert.ok(secrets.length >= 12, 'there is plenty to leak');
 
   const surfaces = [JSON.stringify(publicPartners())];
@@ -346,14 +574,22 @@ test('no contact, no negotiation note and no uncertainty reaches a guest', () =>
   }
   // And the list is genuinely there, so the check above is checking something.
   assert.ok(all.includes('Le Mossacce') && all.includes('WYCON') && all.includes('Tabacchi'));
+  // Nor does a guest of this house read about another one's arrangements.
+  assert.equal(/\bLunArt\b/.test(all), false, 'LunArt\'s working notes stay LunArt\'s');
+};
+
+test('no contact, no negotiation note and no uncertainty reaches a guest', async () => {
+  nothingInternalReachesAGuest();
+  // And with the agreements in force, where Blue Velvet's door note and house
+  // prices are in the register a guest's phone is handed.
+  await confirmed(nothingInternalReachesAGuest)();
 });
 
 test('activating one later is a data change', () => {
   // What it takes: a benefit, a rule, and the word. No renderer knows the
   // difference — `networkSection` and `privilegeSection` already draw both.
-  const saved = PARTNERS.map((p) => ({ ...p }));
   try {
-    applyPartners(saved.map((p) => (p.partner_id !== 'la-petite' ? p : {
+    applyPartners(PARTNERS.map((p) => (p.partner_id !== 'la-petite' ? p : {
       ...p,
       partnership_status: PARTNERSHIP_STATUS.active,
       eligibility: { passState: 'active', entitlementsAll: [ENTITLEMENTS.privilege] },
@@ -373,7 +609,7 @@ test('activating one later is a data change', () => {
     const network = networkSection(partnerNetwork(), 'it');
     assert.equal(count(network, 'data-network-turn'), 1, 'still one list with one turn');
   } finally {
-    applyPartners(saved);
+    restoreAgreements();
   }
   assert.equal(partnerView('la-petite').validation_url, null, 'and back to no agreement');
 });

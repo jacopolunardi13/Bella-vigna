@@ -58,7 +58,13 @@ export const brand = {
     privilege: 'assets/img/pass/bella-vigna-pass-privilege',
   },
   /** The first photograph a guest sees: the terrace, under the vine. */
-  hero: 'property/terrazza',
+  hero: 'rooms/terrazza-esterno',
+  /** The "Discover Florence" card: the logo's skyline, in gold on dark ink. */
+  florenceImage: 'brand/firenze',
+  florenceAlt: {
+    it: 'Il Duomo e il campanile di Giotto, dal logo di Bella Vigna',
+    en: 'The Duomo and Giotto’s bell tower, from the Bella Vigna logo',
+  },
   heroAlt: {
     it: 'La terrazza privata di Bella Vigna, tra le viti',
     en: 'Bella Vigna’s private terrace, among the vines',
@@ -98,6 +104,21 @@ export const brand = {
     defaultFrom: '',
   },
   calendarName: 'Bella Vigna Hair Bookings',
+
+  /**
+   * Interface sentences that are facts about this house (see `src/i18n.js`).
+   * Breakfast is not promised on the Pass: it depends on the booking's rate.
+   */
+  uiOverrides: {
+    it: {
+      passNote: 'Compresa nel soggiorno: è la tua carta d’ospite Bella Vigna, valida per le date della prenotazione.',
+      passNotePrivilege: 'La tua Pass, con i vantaggi Privilege sbloccati per le date della prenotazione.',
+    },
+    en: {
+      passNote: 'Included with your stay: your Bella Vigna guest card, valid for the dates of your booking.',
+      passNotePrivilege: 'Your Pass, with the Privilege benefits unlocked for the dates of your booking.',
+    },
+  },
 };
 
 /** `bellavigna.lang`, `bellavigna.cart.v1` … one namespace per property. */

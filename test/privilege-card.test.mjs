@@ -20,6 +20,16 @@
  * by the server, and nothing in here asks for one earlier. The screen a guest sees
  * before activation is an information state — the card, its dates, its number, and
  * a sentence saying when the code appears — not an authorisation one.
+ *
+ * ── Bella Vigna ─────────────────────────────────────────────────────────────
+ *
+ * For Bella Vigna no partner agreement is confirmed yet, so in the register in
+ * force a card — however it came to exist — unlocks nothing, and the guide offers
+ * no upgrade to buy. That is asserted as it is, in its own block. Everything else
+ * here is the mechanism the day an agreement is confirmed: owned versus usable,
+ * dormant, locked, the words on each screen. Those tests run under `confirmed()`,
+ * which puts the process "as if" every LunArt agreement and price held for Bella
+ * Vigna, through the seams the server uses, and always puts the real register back.
  */
 
 import test from 'node:test';
@@ -32,9 +42,11 @@ import {
 } from '../server/pass.js';
 import { buildCard, cardState, revoke } from '../server/card.js';
 import {
-  ENTITLEMENTS, INTERNAL_PARTNER_FIELDS, PARTNERS, cardBenefits, stayBenefits,
+  ENTITLEMENTS, INTERNAL_PARTNER_FIELDS, NETWORK, PARTNERS, cardBenefits, stayBenefits,
   partnerView, activePartners, publicPartner, publicPartners,
 } from '../commerce/partners.js';
+import { PRODUCTS } from '../commerce/catalog.js';
+import { isPurchasable } from '../commerce/index.js';
 import { privilegeSection, stayBenefitsSection, partnerCard } from '../src/commerce/ui/partners.js';
 import { passNote, passPreview } from '../src/commerce/ui/pass.js';
 import { cardBenefitsBlock } from '../src/commerce/ui/card-sheet.js';
@@ -43,15 +55,30 @@ import { longDate } from '../src/commerce/ui/format.js';
 import { esc } from '../src/ui/dom.js';
 import { readFile } from 'node:fs/promises';
 import { UI } from '../src/i18n.js';
+import { asIfConfirmed } from './support/property.mjs';
 
 const KEY = 'k'.repeat(32);
+
+/**
+ * A test about the mechanism rather than about Bella Vigna's terms: every LunArt
+ * agreement and price confirmed for the body, and the real register put back
+ * afterwards whatever the body did.
+ */
+const confirmed = (body) => async (t) => {
+  const restore = asIfConfirmed();
+  try {
+    return await body(t);
+  } finally {
+    restore();
+  }
+};
 
 const stay = (overrides = {}) => buildReservation({
   source: 'quovai',
   booking_reference: `PC-${Math.random().toString(36).slice(2, 8)}`,
   first_name: 'Irene',
   last_name: 'Rossi',
-  room: '303',
+  room: 'Standard',
   check_in: '2026-11-07',
   check_out: '2026-11-08',
   adults: 2,
@@ -87,6 +114,55 @@ const count = (html, needle) => html.split(needle).length - 1;
 /** Venues in that state, not benefits: `data-access` is on both. */
 const venues = (html, access) => count(html, `class="partner" data-access="${access}"`);
 
+/* ── Bella Vigna, today: owned or not, nothing to use and nothing to buy ─── */
+
+/**
+ * No agreement is confirmed for Bella Vigna, so the upgrade has no venue behind it
+ * and `requiresPartners` keeps it off sale. A card can still exist — a preview
+ * walk, a test, a card issued the day an agreement is later withdrawn — and when
+ * it does, ownership is reported as it is: the Pass is Privilege, the card opens.
+ * What it may not do is promise anything.
+ */
+test('on Bella Vigna\'s register an owned card is still owned, and unlocks nothing', () => {
+  for (const now of [BEFORE, DURING, AFTER]) {
+    const pass = passFor(stay(), { card: card(), now });
+    assert.equal(pass.tier, PASS_TIER.privilege, 'what was bought is still bought');
+    assert.ok(pass.card, 'and the card she paid for still opens');
+    assert.deepEqual(pass.entitlements, [ENTITLEMENTS.privilege]);
+    assert.deepEqual(pass.privileges, [], 'no venue it could be shown at');
+    assert.deepEqual(pass.included, [], 'and no stay benefit agreed for Bella Vigna either');
+    assert.deepEqual(passPreview(pass), [], 'so the home previews no benefit row at all');
+    assert.equal(section(pass), '', 'and draws no Privilege section');
+  }
+
+  // The card's own screen lists no venue, at any point in its life.
+  for (const state of ['not-started', 'active', 'expired', 'revoked']) {
+    assert.equal(cardBenefitsBlock({
+      state, start_date: '2026-11-07', end_date: '2026-11-08', benefits: cardBenefits(),
+    }, 'it'), '', state);
+  }
+});
+
+test('on Bella Vigna\'s register no guest is offered the upgrade, at any state', () => {
+  const product = PRODUCTS.find((p) => p.id === 'privilege-card');
+  assert.equal(isPurchasable(product), false);
+  assert.equal(isPurchasable(product, { allowPlaceholders: true }), false, 'not even in the preview');
+
+  // The Privilege section is the only place the Pass sells the upgrade, and with
+  // nothing behind it there is no section — so no button leading to a product
+  // that would refuse the order.
+  for (const reservation of [stay(), stay({ status: RESERVATION_STATUS.cancelled })]) {
+    for (const now of [BEFORE, DURING, AFTER]) {
+      const pass = passFor(reservation, { now });
+      for (const lang of ['it', 'en']) {
+        const html = section(pass, lang) + stayBenefitsSection(stayBenefits(), pass, lang);
+        assert.equal(count(html, 'data-product='), 0, `${pass.state}/${lang}`);
+        assert.equal(html, '', `${pass.state}/${lang}: nothing to draw`);
+      }
+    }
+  }
+});
+
 /* ── A. A standard Pass, before the stay ─────────────────────────────────── */
 
 test('A · a stay with no upgrade is a standard Pass, with no card to open', () => {
@@ -99,7 +175,7 @@ test('A · a stay with no upgrade is a standard Pass, with no card to open', () 
   assert.deepEqual(pass.privileges, []);
 });
 
-test('A · and the Privilege benefits are offered, not hidden, before arrival', () => {
+test('A · and the Privilege benefits are offered, not hidden, before arrival', confirmed(() => {
   const html = section({ state: 'not-started', entitlements: [] });
 
   assert.ok(html.includes('Le Firme') && html.includes('Blue Velvet'), 'shown');
@@ -112,18 +188,18 @@ test('A · and the Privilege benefits are offered, not hidden, before arrival', 
    */
   assert.equal(count(html, 'data-product="privilege-card"'), 1);
   assert.ok(html.includes(UI.it.privilegeGet));
-});
+}));
 
 /* ── B. Privilege already bought, stay still to come ─────────────────────── */
 
-test('B · an upgrade bought ahead of the stay is owned from the moment it is paid', () => {
+test('B · an upgrade bought ahead of the stay is owned from the moment it is paid', confirmed(() => {
   const pass = passFor(stay(), { card: card(), now: BEFORE });
 
   assert.equal(pass.tier, PASS_TIER.privilege, 'owned');
   assert.equal(pass.state, PASS_STATE.notStarted, 'and not usable yet');
   assert.deepEqual(pass.entitlements, [ENTITLEMENTS.privilege]);
   assert.equal(pass.privileges.length, 2, 'the partners it unlocks are named');
-});
+}));
 
 test('B · the Pass carries the card, with the date it starts and no code', () => {
   const pass = passFor(stay(), { card: card(), now: BEFORE });
@@ -150,7 +226,7 @@ test('B · the Pass carries the card, with the date it starts and no code', () =
   }
 });
 
-test('B · a guest who already paid is never asked to buy it again', () => {
+test('B · a guest who already paid is never asked to buy it again', confirmed(() => {
   for (const lang of ['it', 'en']) {
     const html = section(held('not-started', { live: false }), lang);
 
@@ -161,11 +237,11 @@ test('B · a guest who already paid is never asked to buy it again', () => {
     assert.equal(html.includes(UI[lang].privilegeBenefitsDiscover), false);
     assert.equal(venues(html, 'unavailable'), 2, 'owned, and not usable today');
   }
-});
+}));
 
 /* ── C. Privilege, during the stay ───────────────────────────────────────── */
 
-test('C · during the stay the same card is active and everything is unlocked', () => {
+test('C · during the stay the same card is active and everything is unlocked', confirmed(() => {
   const pass = passFor(stay(), { card: card(), now: DURING });
 
   assert.equal(pass.tier, PASS_TIER.privilege);
@@ -178,11 +254,11 @@ test('C · during the stay the same card is active and everything is unlocked', 
   assert.equal(count(html, 'partner__lock'), 0);
   assert.equal(count(html, 'data-product='), 0);
   assert.ok(html.includes(UI.it.privilegeBenefitsNote), 'now it says how to use them');
-});
+}));
 
 /* ── D. After the stay ───────────────────────────────────────────────────── */
 
-test('D · once the stay is over the Pass expires and the card goes with it', () => {
+test('D · once the stay is over the Pass expires and the card goes with it', confirmed(() => {
   const pass = passFor(stay(), { card: card(), now: AFTER });
 
   assert.equal(pass.tier, PASS_TIER.privilege, 'it was still bought');
@@ -194,16 +270,16 @@ test('D · once the stay is over the Pass expires and the card goes with it', ()
   assert.equal(venues(html, 'available'), 0, 'nothing is claimable');
   assert.equal(count(html, 'data-product='), 0,
     'and a stay that is over is not a reason to sell an upgrade for it');
-});
+}));
 
-test('D · a cancelled booking is not a sales opportunity either', () => {
+test('D · a cancelled booking is not a sales opportunity either', confirmed(() => {
   const pass = passFor(stay({ status: RESERVATION_STATUS.cancelled }), { now: DURING });
   assert.equal(pass.state, PASS_STATE.cancelled);
 
   const html = section({ state: pass.state, entitlements: [] });
   assert.equal(count(html, 'data-product='), 0);
   assert.equal(venues(html, 'unavailable'), 2);
-});
+}));
 
 /* ── E. A card that was withdrawn ────────────────────────────────────────── */
 
@@ -255,7 +331,7 @@ const TWO_DAYS = () => card({ ...buildCard({
 
 const at = (iso) => new Date(`${iso}T20:00:00Z`);
 
-test('A · a live stay whose Privilege has not started yet owns it and cannot use it', () => {
+test('A · a live stay whose Privilege has not started yet owns it and cannot use it', confirmed(() => {
   const pass = passFor(LONG_STAY(), { card: TWO_DAYS(), now: at('2026-11-01') });
 
   // Ownership, untouched: the gold card, the card screen, no second sale.
@@ -272,9 +348,9 @@ test('A · a live stay whose Privilege has not started yet owns it and cannot us
   assert.equal(venues(html, 'unavailable'), 2);
   assert.equal(count(html, 'partner__lock'), 0, 'owned, so never marked as an upgrade');
   assert.equal(count(html, 'data-product='), 0, 'and never offered again');
-});
+}));
 
-test('A · and is told about the card, not about the stay it is already inside', () => {
+test('A · and is told about the card, not about the stay it is already inside', confirmed(() => {
   const pass = passFor(LONG_STAY(), { card: TWO_DAYS(), now: at('2026-11-01') });
   const html = section(pass);
 
@@ -282,9 +358,9 @@ test('A · and is told about the card, not about the stay it is already inside',
   assert.equal(html.includes(UI.it.privilegeWhenActive), false,
     'she is in Florence with a live Pass: that condition is already met');
   assert.equal(html.includes(UI.it.privilegeBenefitsNote), false);
-});
+}));
 
-test('B · on the days the card runs, everything is usable', () => {
+test('B · on the days the card runs, everything is usable', confirmed(() => {
   for (const day of ['2026-11-03', '2026-11-04']) {
     const pass = passFor(LONG_STAY(), { card: TWO_DAYS(), now: at(day) });
     assert.equal(pass.card.state, 'active', day);
@@ -295,9 +371,9 @@ test('B · on the days the card runs, everything is usable', () => {
     assert.ok(html.includes(UI.it.privilegeBenefitsNote), day);
     assert.equal(count(html, 'data-product='), 0, day);
   }
-});
+}));
 
-test('C · once the card is over the stay goes on and the benefits do not', () => {
+test('C · once the card is over the stay goes on and the benefits do not', confirmed(() => {
   for (const day of ['2026-11-05', '2026-11-06']) {
     const pass = passFor(LONG_STAY(), { card: TWO_DAYS(), now: at(day) });
 
@@ -313,9 +389,9 @@ test('C · once the card is over the stay goes on and the benefits do not', () =
       'a card that has run its course is not a reason to sell another');
     assert.ok(html.includes(UI.it.privilegeWhenCardActive), day);
   }
-});
+}));
 
-test('D · a standard guest on the same stay is unaffected: locked, and buyable', () => {
+test('D · a standard guest on the same stay is unaffected: locked, and buyable', confirmed(() => {
   const pass = passFor(LONG_STAY(), { now: at('2026-11-01') });
 
   assert.equal(pass.tier, PASS_TIER.pass);
@@ -326,9 +402,9 @@ test('D · a standard guest on the same stay is unaffected: locked, and buyable'
   assert.equal(count(html, 'partner__lock'), 2, 'marked as an upgrade');
   assert.equal(count(html, 'data-product="privilege-card"'), 1, 'and still buyable');
   assert.ok(html.includes(UI.it.privilegeBenefitsDiscover));
-});
+}));
 
-test('E · before the stay begins an owned card is owned and dormant', () => {
+test('E · before the stay begins an owned card is owned and dormant', confirmed(() => {
   const pass = passFor(LONG_STAY(), { card: TWO_DAYS(), now: at('2026-10-20') });
 
   assert.equal(pass.state, PASS_STATE.notStarted);
@@ -342,9 +418,9 @@ test('E · before the stay begins an owned card is owned and dormant', () => {
   assert.equal(count(html, 'data-product='), 0);
   assert.ok(html.includes(UI.it.privilegeWhenActive),
     'here the stay is what has not started, and that is what it says');
-});
+}));
 
-test('what the stay includes is never gated on the card running', () => {
+test('what the stay includes is never gated on the card running', confirmed(() => {
   // Opera Caffè asks for no entitlement, so it cannot be dormant. A guest whose
   // Privilege ran out on the 4th still gets their breakfast on the 6th.
   for (const day of ['2026-11-01', '2026-11-03', '2026-11-06']) {
@@ -352,7 +428,7 @@ test('what the stay includes is never gated on the card running', () => {
     const html = stayBenefitsSection(stayBenefits(), pass, 'it');
     assert.ok(html.includes('class="partner" data-access="available"'), day);
   }
-});
+}));
 
 test('the three states are ownership, the stay, and the card — and all three are published', () => {
   const pass = passFor(LONG_STAY(), { card: TWO_DAYS(), now: at('2026-11-01') });
@@ -400,7 +476,7 @@ test('the home says what is true of this card, not of the tier', () => {
  * venues under it were not, so "10% di sconto" set large in the serif read as an
  * offer a guest could take up that evening.
  */
-test('the card says when its benefits start, and stops saying it once they have', () => {
+test('the card says when its benefits start, and stops saying it once they have', confirmed(() => {
   const dormant = { state: 'not-started', start_date: '2026-11-03', end_date: '2026-11-04', benefits: cardBenefits() };
   const live = { ...dormant, state: 'active' };
   const over = { ...dormant, state: 'expired' };
@@ -420,14 +496,14 @@ test('the card says when its benefits start, and stops saying it once they have'
     assert.ok(ended.includes(esc(fill(UI[lang].cardBenefitsEnded, { date: longDate('2026-11-04', lang) }))), lang);
     assert.equal(venues(ended, 'unavailable'), 2, 'kept, as a record, and plainly over');
   }
-});
+}));
 
 /**
  * The two rows on the home, which had the same contradiction one screen up: the
  * paid benefit in full gold, two lines above a sentence saying it is not available
  * until Thursday.
  */
-test('the paid row on the home dims with the card, and the stay row never does', () => {
+test('the paid row on the home dims with the card, and the stay row never does', confirmed(() => {
   const rows = (now) => passPreview(passFor(LONG_STAY(), { card: TWO_DAYS(), now }));
 
   for (const [label, now] of [['before', at('2026-11-01')], ['after', at('2026-11-05')]]) {
@@ -444,14 +520,14 @@ test('the paid row on the home dims with the card, and the stay row never does',
   assert.ok(live.className.includes('pass__benefit--privilege'));
   assert.equal(live.className.includes('dormant'), false, 'full strength once the card runs');
   assert.equal(stay.className, '');
-});
+}));
 
-test('a standard Pass previews only what the stay includes, at full strength', () => {
+test('a standard Pass previews only what the stay includes, at full strength', confirmed(() => {
   const rows = passPreview(passFor(LONG_STAY(), { now: at('2026-11-01') }));
   assert.equal(rows.length, 1);
   assert.equal(rows[0].view.partner_id, 'opera-caffe');
   assert.equal(rows[0].className, '', 'nothing to dim, and nothing to lock');
-});
+}));
 
 test('the dormant row is a softened gold rule, not a removed one', async () => {
   const css = await readFile(new URL('../assets/css/app.css', import.meta.url), 'utf8');
@@ -482,13 +558,21 @@ const internalStrings = () => {
     if (typeof value === 'string' && value.trim().length > 12) out.push(value.trim());
     else if (value && typeof value === 'object') Object.values(value).forEach(walk);
   };
-  for (const partner of PARTNERS) {
+  // Both registers: what Bella Vigna writes about a venue being set up, and what
+  // LunArt wrote about the agreements it may yet inherit — Blue Velvet's doors among them.
+  for (const partner of [...PARTNERS, ...NETWORK]) {
     for (const field of INTERNAL_PARTNER_FIELDS) walk(partner[field]);
   }
   return out;
 };
 
-test('internal partner fields never reach the guest view', () => {
+/** Run a check on Bella Vigna's register, then again with every agreement in force. */
+const inBothRegisters = async (check) => {
+  check();
+  await confirmed(check)();
+};
+
+test('internal partner fields never reach the guest view', () => inBothRegisters(() => {
   const secrets = internalStrings();
   assert.ok(secrets.length >= 3, 'there is something to leak in the first place');
 
@@ -502,7 +586,7 @@ test('internal partner fields never reach the guest view', () => {
         `${partner.partner_id} carries an internal line`);
     }
   }
-});
+}));
 
 /**
  * The second route, and the one that was open.
@@ -512,7 +596,7 @@ test('internal partner fields never reach the guest view', () => {
  * venue's negotiation notes on a screen; they were a view-source away on a public
  * endpoint.
  */
-test('nor into the register the browser is handed', () => {
+test('nor into the register the browser is handed', () => inBothRegisters(() => {
   const secrets = internalStrings();
   const published = JSON.stringify(publicPartners());
 
@@ -534,9 +618,9 @@ test('nor into the register the browser is handed', () => {
   }
   assert.ok(published.includes('14R–16R'), 'with the address, which is what finds the door');
   assert.equal(publicPartner({ partner_id: 'x', notes: 'secret', name: 'X' }).notes, undefined);
-});
+}));
 
-test('nor into any HTML a guest is drawn', () => {
+test('nor into any HTML a guest is drawn', confirmed(() => {
   const secrets = internalStrings();
   const passes = [
     { state: 'active', entitlements: [], live_entitlements: [] },
@@ -575,7 +659,7 @@ test('nor into any HTML a guest is drawn', () => {
     'the door note is operational and belongs nowhere near a guest');
   assert.equal(/listino|fino all.01:00/i.test(html), false,
     'and neither do the house prices behind a negotiation');
-});
+}));
 
 /* ── The binding, and the hole it used to leave ──────────────────────────── */
 
@@ -623,7 +707,7 @@ test('a card belonging to somebody else is never collected', async () => {
 
 /* ── F. The standard Pass, unchanged ─────────────────────────────────────── */
 
-test('F · the standard Pass still carries the stay and nothing that was not bought', () => {
+test('F · the standard Pass still carries the stay and nothing that was not bought', confirmed(() => {
   for (const now of [BEFORE, DURING, AFTER]) {
     const pass = passFor(stay(), { now });
     assert.equal(pass.tier, PASS_TIER.pass);
@@ -633,9 +717,9 @@ test('F · the standard Pass still carries the stay and nothing that was not bou
     assert.ok(pass.included.some((view) => view.partner_id === 'opera-caffe'),
       'and the stay still includes what it always included');
   }
-});
+}));
 
-test('F · the Opera Caffè benefit never moves to the paid side, at any state', () => {
+test('F · the Opera Caffè benefit never moves to the paid side, at any state', confirmed(() => {
   for (const now of [BEFORE, DURING, AFTER]) {
     for (const held of [null, card()]) {
       const pass = passFor(stay(), { card: held, now });
@@ -644,7 +728,7 @@ test('F · the Opera Caffè benefit never moves to the paid side, at any state',
     }
   }
   assert.ok(stayBenefits().some((view) => view.partner_id === 'opera-caffe'));
-});
+}));
 
 /* ── The matrix, as a matrix ─────────────────────────────────────────────── */
 

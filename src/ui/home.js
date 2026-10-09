@@ -27,7 +27,7 @@ import { guest, isPersonal } from '../guest.js';
 import {
   PHASES, getEntry, property, rooms, roomsCommon,
 } from '../../data/index.js';
-import { roomsIn, roomList } from '../../commerce/rooms.js';
+import { roomsIn, roomList, roomLabel } from '../../commerce/rooms.js';
 import { brand } from '../../data/brand.js';
 
 /**
@@ -197,9 +197,9 @@ function assignedRoom(lang) {
   if (!room) return '';
 
   return `<article class="room room--assigned">
-    ${slider(room.photos, lang, { label: `${t(room.category, lang)} ${room.number}` })}
+    ${slider(room.photos, lang, { label: `${t(room.category, lang)} ${roomLabel(room.id, lang)}` })}
     <div class="room__head">
-      <h3 class="room__number">${esc(UI[lang].roomLabel)} ${esc(room.number)}</h3>
+      <h3 class="room__number">${esc(UI[lang].roomLabel)} ${esc(roomLabel(room.id, lang))}</h3>
       <span class="room__badge room__badge--highlight">${esc(t(room.category, lang))}</span>
     </div>
     ${room.view ? `<p class="room__meta">${esc(t(room.view, lang))}</p>` : ''}
@@ -268,8 +268,7 @@ function florenceCard(lang) {
     <h2 class="visually-hidden" id="h-florence-card">${esc(UI[lang].florence)}</h2>
     <button class="feature" type="button" data-goto="florence">
       <span class="feature__frame">
-        ${picture('views/arno-palazzi',
-    lang === 'it' ? 'I palazzi sull’Arno al tramonto' : 'The palazzi along the Arno at dusk',
+        ${picture(brand.florenceImage, brand.florenceAlt[lang === 'en' ? 'en' : 'it'],
     { sizes: '(min-width: 760px) 720px, 100vw' })}
       </span>
       <span class="feature__caption">
@@ -341,9 +340,9 @@ function roomCard(room, lang) {
     : `<span class="room__badge${room.highlight ? ' room__badge--highlight' : ''}">${esc(t(room.category, lang))}</span>`;
 
   return `<article class="room">
-    ${slider(room.photos, lang, { label: `${t(room.category, lang)} ${room.number}` })}
+    ${slider(room.photos, lang, { label: `${t(room.category, lang)} ${roomLabel(room.id, lang)}` })}
     <div class="room__head">
-      <h3 class="room__number">${esc(room.number)}</h3>
+      <h3 class="room__number">${esc(roomLabel(room.id, lang))}</h3>
       ${badge}
     </div>
     ${room.view ? `<p class="room__meta">${esc(t(room.view, lang))}</p>` : ''}

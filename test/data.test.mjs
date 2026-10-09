@@ -170,7 +170,9 @@ test('no room shows a photograph belonging to another room, or to no room', () =
   const wrong = [];
   for (const room of rooms) {
     for (const photo of room.photos) {
-      if (!photo.src.startsWith(`rooms/${room.number}-`)) wrong.push(`${room.number}: ${photo.src}`);
+      // The file name carries the attribution. Bella Vigna's rooms are named, not
+      // numbered, and file names are lower case: `rooms/terrazza-…` is Terrazza's.
+      if (!photo.src.startsWith(`rooms/${room.number.toLowerCase()}-`)) wrong.push(`${room.number}: ${photo.src}`);
     }
   }
   assert.deepEqual(wrong, []);
@@ -211,31 +213,42 @@ test('every room shows at least one photograph of itself', () => {
   assert.deepEqual(bare, []);
 });
 
-/** The two photographs that moved, each now in one gallery and one only. */
-test('the owner-confirmed attributions hold, in both directions', () => {
-  const holders = (pattern) => rooms
-    .filter((room) => room.photos.some((photo) => pattern.test(photo.src)))
-    .map((room) => room.number);
-
-  // The desk and window: room 302's, and it was in 304.
-  assert.deepEqual(holders(/302-scrivania(?!-crop)/), ['302']);
-  // The grey padded headboard: room 304's, and it was published as 302-camera.
-  assert.deepEqual(holders(/304-testiera/), ['304']);
-  // Neither of the old names appears anywhere any more.
-  assert.deepEqual(holders(/304-camera|302-camera/), [], 'the misattributed names are retired');
+/**
+ * Each room shows the photographs the property's own June 2026 page captioned for
+ * it, and no other. The page is the only attribution there is (no owner-confirmed
+ * gallery exists yet), so the mapping is pinned here: a photo drifting into the
+ * wrong room has to fail a test, not wait for a guest to notice.
+ */
+test('the attributions from the property’s own page hold, room by room', () => {
+  const gallery = (id) => rooms.find((room) => room.id === id).photos.map((photo) => photo.src);
+  assert.deepEqual(gallery('Standard'), ['rooms/standard-camera', 'rooms/standard-bagno']);
+  assert.deepEqual(gallery('Deluxe'),
+    ['rooms/deluxe-camera', 'rooms/deluxe-doccia', 'rooms/deluxe-bagno', 'rooms/deluxe-angolo']);
+  assert.deepEqual(gallery('Terrazza'),
+    ['rooms/terrazza-esterno', 'rooms/terrazza-camera', 'rooms/terrazza-letto', 'rooms/terrazza-bagno']);
 });
 
 /**
- * Room 304's gallery is the four the owner confirmed on the Booking listing, in
- * the order a guest would walk the room: the room, the bed, the view, the bathroom.
+ * One attribution is doubtful and must stay visibly so: the Property Pack says the
+ * terrace room's bathroom is turquoise, and the photograph the old page gave it is
+ * stone-coloured. The text names no colour, and the room carries the question.
  */
-test('room 304 carries its four confirmed photographs', () => {
-  const room304 = rooms.find((room) => room.number === '304');
-  assert.deepEqual(
-    room304.photos.map((photo) => photo.src),
-    ['rooms/304-letto', 'rooms/304-testiera', 'rooms/304-finestra', 'rooms/304-bagno'],
-  );
-  assert.equal(room304.verify, undefined, 'nothing left to verify about them');
+test('the doubtful terrace bathroom stays flagged, and unnamed in the copy', () => {
+  const terrace = rooms.find((room) => room.id === 'Terrazza');
+  assert.equal(terrace.verify?.level, 'blocker');
+  assert.match(terrace.verify.note, /turchese/);
+  assert.match(terrace.verify.note, /terrazza-bagno/);
+  for (const lang of ['it', 'en']) {
+    assert.doesNotMatch(terrace.summary[lang], /turchese|turquoise/i);
+  }
+});
+
+/** Capacity and the QuoVai identifier are unknown for every room, and say so. */
+test('every room blocks publication on its identifier and capacity', () => {
+  for (const room of rooms) {
+    assert.equal(room.verify?.level, 'blocker', `${room.id} must block until its QuoVai id and capacity are confirmed`);
+    assert.match(room.verify.note, /capienza/i);
+  }
 });
 
 /**
@@ -364,7 +377,8 @@ test('the property block has every localised field a view asks for', () => {
     assertL10n(property[field], `property.${field}`);
   }
   assertL10n(property.address.city, 'property.address.city');
-  assertL10n(property.address.floor, 'property.address.floor');
+  // The floor is not in the Property Pack. Absent is allowed; present must be complete.
+  if (property.address.floor != null) assertL10n(property.address.floor, 'property.address.floor');
   assert.match(property.address.maps, /^https:\/\//);
 });
 

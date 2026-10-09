@@ -17,6 +17,7 @@ import * as cart from '../cart.js';
 import { startCheckout } from '../api.js';
 import { rememberOrder, markCheckoutPending } from './orders.js';
 import { looksLikeEmail } from '../../../commerce/ordering.js';
+import { ROOM_INPUT } from '../../../commerce/rooms.js';
 
 function lineRow(entry, lang) {
   const { product, variant, line } = entry;
@@ -87,7 +88,7 @@ function body(lang) {
       </label>
       <label class="field field--inline">
         <span class="field__label">${esc(UI[lang].roomNumber)} <span class="field__optional">${esc(UI[lang].optional)}</span></span>
-        <input type="text" name="room" inputmode="numeric" maxlength="6" placeholder="303">
+        <input type="text" name="room" inputmode="${ROOM_INPUT.inputmode}" maxlength="${ROOM_INPUT.maxlength}" placeholder="${esc(ROOM_INPUT.placeholder)}">
       </label>
 
       ${review.lines.some((l) => l.product.purchaseMode === 'authorize-then-capture')

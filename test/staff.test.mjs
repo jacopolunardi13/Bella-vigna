@@ -38,7 +38,7 @@ const store = () => createStore();
 const reservationEvent = (over = {}) => ({
   kind: 'new', source: 'quovai', booking_reference: 'BK-1',
   first_name: 'Marta', last_name: 'Venturi', guest_email: 'marta@example.invalid',
-  check_in: '2026-10-12', check_out: '2026-10-15', adults: 2, room: '303',
+  check_in: '2026-10-12', check_out: '2026-10-15', adults: 2, room: 'Deluxe',
   message_id: `<${Math.random()}@q>`, ...over,
 });
 
@@ -138,7 +138,7 @@ test('an email due for a stay that has since been cancelled is dropped at send t
 
 test('the email is bilingual, carries the link, and nothing else identifying', () => {
   const reservation = buildReservation({
-    first_name: 'Marta', last_name: 'Venturi', check_in: '2026-10-12', check_out: '2026-10-15', room: '303',
+    first_name: 'Marta', last_name: 'Venturi', check_in: '2026-10-12', check_out: '2026-10-15', room: 'Deluxe',
   });
   for (const lang of ['it', 'en']) {
     const mail = renderGuideEmail({ reservation, origin: 'https://g.example', lang });
@@ -151,7 +151,14 @@ test('the email is bilingual, carries the link, and nothing else identifying', (
   const it = renderGuideEmail({ reservation, lang: 'it' });
   const en = renderGuideEmail({ reservation, lang: 'en' });
   assert.notEqual(it.subject, en.subject);
-  assert.match(en.html, /Open your LunArt Guest Guide/);
+  // In the property's own words (`data/brand.js`), and in no other property's.
+  assert.equal(it.subject, 'La tua Bella Vigna Guest Guide');
+  assert.equal(en.subject, 'Your Bella Vigna Guest Guide');
+  assert.match(en.html, /Open your Bella Vigna Guest Guide/);
+  assert.match(it.html, /Apri la tua Bella Vigna Guest Guide/);
+  for (const mail of [it, en]) {
+    assert.equal(/LunArt/i.test(`${mail.subject}\n${mail.text}\n${mail.html}`), false, 'not a word of the other house');
+  }
 });
 
 test('with no mail provider configured, nothing can leave', () => {
@@ -175,8 +182,8 @@ const order = (over = {}) => ({
   amount: 6900,
   currency: 'EUR',
   payment_mode: 'instant',
-  customer: { name: 'Marta', room: '303', phone: '+39348', email: 'm@example.invalid' },
-  lines: [{ product_id: 'brunch', title: 'Brunch', quantity: 1, amount: 6900, date: '2026-10-13', slot_id: 'b-0900', room: '303', fields: {}, options: {} }],
+  customer: { name: 'Marta', room: 'Deluxe', phone: '+39348', email: 'm@example.invalid' },
+  lines: [{ product_id: 'brunch', title: 'Brunch', quantity: 1, amount: 6900, date: '2026-10-13', slot_id: 'b-0900', room: 'Deluxe', fields: {}, options: {} }],
   provider: { status: 'not-required' },
   events: [],
   ...over,
@@ -221,7 +228,7 @@ test('fulfilment moves forwards, and refuses the moves that are wrong', async ()
 test('an unavailable bottle is a conversation, not a silent substitution', async () => {
   const db = store();
   const saved = await db.orders.create(order({
-    lines: [{ product_id: 'wine-in-room', title: 'Wine', variant_id: 'brunello', quantity: 1, amount: 8900, date: '2026-10-13', slot_id: 'w-1900', room: '303', fields: {}, options: {} }],
+    lines: [{ product_id: 'wine-in-room', title: 'Wine', variant_id: 'brunello', quantity: 1, amount: 8900, date: '2026-10-13', slot_id: 'w-1900', room: 'Deluxe', fields: {}, options: {} }],
   }));
   const result = await requestSubstitution({ store: db, order: saved });
   assert.equal(result.ok, true);
@@ -300,12 +307,13 @@ test('a reservation typed in by staff behaves like any other', async () => {
   const db = store();
   const result = await createManualReservation({
     store: db,
-    input: { first_name: 'Diego', last_name: 'Prova', check_in: '2026-10-12', check_out: '2026-10-14', room: '301', guest_email: 'd@example.invalid' },
+    input: { first_name: 'Diego', last_name: 'Prova', check_in: '2026-10-12', check_out: '2026-10-14', room: 'Standard', guest_email: 'd@example.invalid' },
     now: new Date('2026-10-01T08:00:00Z'),
   });
 
   assert.equal(result.ok, true);
   assert.equal(result.reservation.source, 'manual');
+  assert.deepEqual(result.reservation.rooms, ['Standard'], 'one of the house’s own rooms');
   assert.ok(result.reservation.booking_reference.startsWith('MAN-'), 'given a reference of its own');
   assert.ok(result.reservation.guide_token);
   const [delivery] = await db.deliveries.list({});
@@ -320,12 +328,13 @@ test('editing a reservation moves the email and keeps the link', async () => {
     now: new Date('2026-10-01T08:00:00Z'),
   });
   const edited = await editReservation({
-    store: db, reservation, patch: { check_in: '2026-10-25', check_out: '2026-10-27', room: '305' },
+    store: db, reservation, patch: { check_in: '2026-10-25', check_out: '2026-10-27', room: 'Terrazza' },
     now: new Date('2026-10-02T08:00:00Z'),
   });
 
   assert.equal(edited.reservation.check_in, '2026-10-25');
-  assert.equal(edited.reservation.room, '305');
+  assert.equal(edited.reservation.room, 'Terrazza');
+  assert.deepEqual(edited.reservation.rooms, ['Terrazza']);
   assert.equal(edited.reservation.guide_token, reservation.guide_token);
   const [delivery] = await db.deliveries.list({});
   assert.equal(delivery.send_at, propertyTimeToInstant('2026-10-22', '10:00').toISOString());
@@ -388,6 +397,24 @@ test('the sync screen says what has happened to each reservation', async () => {
   assert.ok(view.rows.every((row) => row.guide_created));
 });
 
+test('a room number from LunArt’s numbering is not a Bella Vigna room, and the sync screen says so', async () => {
+  // The rooms are Standard, Deluxe and Terrazza (`data/rooms.js`). A booking that
+  // arrives saying "303" — LunArt's numbering, a typo, a channel's own code — is
+  // kept as written for a person to read, and is not taken for one of ours.
+  const db = store();
+  const today = propertyDate();
+  const { reservation } = await ingestEvent({
+    store: db, event: reservationEvent({ booking_reference: 'BK-303', room: '303', check_in: addDays(today, 5), check_out: addDays(today, 8) }),
+  });
+  assert.equal(reservation.room, '303', 'nothing a person typed is thrown away');
+  assert.deepEqual(reservation.rooms, [], 'but it names none of our rooms');
+
+  const view = await syncOverview({ store: db });
+  const row = view.rows.find((entry) => entry.needs_review);
+  assert.ok(row, 'it is put in front of staff');
+  assert.ok(row.problems.includes('no-room'));
+});
+
 /* ── Notifications ───────────────────────────────────────────────────────── */
 
 test('with no VAPID keys the app works and says push is not configured', async () => {
@@ -396,13 +423,14 @@ test('with no VAPID keys the app works and says push is not configured', async (
   assert.equal(push.configured, false);
 
   await registerSubscription({ store: db, subscription: { endpoint: 'https://push.example/abc', keys: { p256dh: 'k', auth: 'a' } }, label: 'iPhone' });
-  const result = await notifyStaff({ store: db, push, event: 'order-new', data: { orderId: 'o1', title: 'Wine in your room', room: '303', amount: '110,00 €', when: '18:30', express: true } });
+  const result = await notifyStaff({ store: db, push, event: 'order-new', data: { orderId: 'o1', title: 'Wine in your room', room: 'Deluxe', amount: '110,00 €', when: '18:30', express: true } });
 
   assert.equal(result.ok, true);
   assert.equal(result.simulated, true, 'nothing actually went');
   assert.equal(result.devices, 1, 'but the device is registered for when keys exist');
-  assert.match(result.payload.title, /^EXPRESS — /);
-  assert.match(result.payload.body, /Camera 303/);
+  // The house first — the same phone may hold LunArt's Staff app — then the urgency.
+  assert.match(result.payload.title, /^Bella Vigna · EXPRESS — /);
+  assert.match(result.payload.body, /Camera Deluxe/);
 });
 
 test('a device registered before the keys exist is kept, and not duplicated', async () => {
@@ -422,10 +450,13 @@ test('a nonsense subscription is refused', async () => {
 
 test('the notification wording is built from the event, not the caller', () => {
   const awaiting = buildNotification('order-awaiting', { orderId: 'o2', title: 'Private transfer' });
-  assert.equal(awaiting.title, 'Private transfer');
+  assert.equal(awaiting.title, 'Bella Vigna · Private transfer');
+  assert.equal(awaiting.tag, 'bella-vigna:order:o2', 'tagged per property, so LunArt’s o2 is a different notification');
+  assert.equal(awaiting.property, 'bella-vigna');
   assert.match(awaiting.body, /conferma/);
-  const reservation = buildNotification('reservation-new', { reservationId: 'r1', guest: 'Marta Venturi', room: '303', check_in: '2026-10-12', check_out: '2026-10-15' });
-  assert.match(reservation.body, /Marta Venturi · Camera 303 · 2026-10-12 → 2026-10-15/);
+  const reservation = buildNotification('reservation-new', { reservationId: 'r1', guest: 'Marta Venturi', room: 'Deluxe', check_in: '2026-10-12', check_out: '2026-10-15' });
+  assert.equal(reservation.title, 'Bella Vigna · Nuova prenotazione');
+  assert.match(reservation.body, /Marta Venturi · Camera Deluxe · 2026-10-12 → 2026-10-15/);
   assert.equal(buildNotification('nonsense', {}), null);
 });
 
@@ -435,15 +466,15 @@ test('the hair calendar is a described seam, not a stub that invents slots', asy
   const calendar = createGoogleCalendarAdapter({});
   assert.equal(calendar.configured, false);
   assert.ok(calendar.requires.includes('GOOGLE_CALENDAR_ID'));
-  assert.equal(calendar.writeCalendar, 'LunArt Hair Bookings');
+  assert.equal(calendar.writeCalendar, 'Bella Vigna Hair Bookings');
   await assert.rejects(() => calendar.freeBusy({ from: '2026-10-01', to: '2026-10-07' }), /not configured/);
 
-  const event = calendar.eventFor({ variantId: 'men-cut', date: '2026-10-12', time: '10:00', room: '303', guestName: 'Marta', serviceTitle: 'Taglio' });
+  const event = calendar.eventFor({ variantId: 'men-cut', date: '2026-10-12', time: '10:00', room: 'Deluxe', guestName: 'Marta', serviceTitle: 'Taglio' });
   assert.equal(event.minutes, 60, 'the internal duration, for blocking out time');
-  assert.match(event.summary, /camera 303/);
+  assert.match(event.summary, /^Bella Vigna · Taglio · camera Deluxe$/);
   assert.match(event.description, /Marta/);
 
-  const written = await calendar.createEvent({ variantId: 'men-cut', date: '2026-10-12', time: '10:00', room: '303' });
+  const written = await calendar.createEvent({ variantId: 'men-cut', date: '2026-10-12', time: '10:00', room: 'Deluxe' });
   assert.equal(written.ok, false);
   assert.equal(written.reason, 'source-not-configured');
   assert.equal(providerCalendars({}).some((entry) => entry.configured), false);
@@ -462,7 +493,7 @@ test('a paid hair booking records that it has not reached a calendar', async () 
     lines: [{
       product_id: 'hair-service', variant_id: 'men-cut', title: 'Private Hair Service',
       variant_title: 'Taglio', quantity: 1, amount: 4900, date: '2026-10-12', time: '10:00',
-      room: '303', fulfillment_type: 'provider', fields: { guestName: 'Marta', phone: '+39348' }, options: {},
+      room: 'Deluxe', fulfillment_type: 'provider', fields: { guestName: 'Marta', phone: '+39348' }, options: {},
     }],
     status: PAYMENT_STATUS.pending,
     stripe_payment_intent_id: 'pi_test',

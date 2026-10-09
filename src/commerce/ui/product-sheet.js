@@ -24,6 +24,7 @@ import { policyOf } from '../../../commerce/cancellation.js';
 import { cardStartDates, cardVariantsForStay } from '../../../commerce/stay.js';
 import { guestStay, guest } from '../../guest.js';
 import * as cart from '../cart.js';
+import { ROOM_INPUT } from '../../../commerce/rooms.js';
 
 const ERROR_TEXT = {
   it: {
@@ -282,7 +283,7 @@ function body(product, lang) {
 
         ${product.requiresRoom ? `<label class="field">
           <span class="field__label">${esc(UI[lang].roomNumber)}</span>
-          <input type="text" name="room" required inputmode="numeric" placeholder="303" maxlength="6"
+          <input type="text" name="room" required inputmode="${ROOM_INPUT.inputmode}" placeholder="${esc(ROOM_INPUT.placeholder)}" maxlength="${ROOM_INPUT.maxlength}"
             value="${esc(knownRoom)}">
         </label>` : ''}
 

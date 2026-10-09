@@ -58,7 +58,7 @@ async function guest(db, key, over = {}) {
     source: 'quovai', booking_reference: key.toUpperCase(),
     first_name: 'Ospite', last_name: key,
     guest_email: `${key}@example.invalid`,
-    check_in: day(5), check_out: day(7), room: '303', adults: 2,
+    check_in: day(5), check_out: day(7), room: 'Deluxe', adults: 2,
     ...over,
   }));
 }

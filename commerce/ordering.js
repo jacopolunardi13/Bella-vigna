@@ -19,6 +19,7 @@ import { getWine, leadTimeMinutesFor, leadMinutesForWineOrder } from './wine.js'
 import { propertyTimeToInstant, propertyDate, addDays, isValidDate, isValidTime } from './time.js';
 import { isSlotOffered, slotsFor } from './schedule.js';
 import { cardFitsStay, asStay, stayDates } from './stay.js';
+import { cardPartners } from './partners.js';
 
 const productsById = new Map(PRODUCTS.map((p) => [p.id, p]));
 export const getProduct = (id) => productsById.get(id);
@@ -233,6 +234,16 @@ export function validateLine(rawLine, { now = new Date(), allowPlaceholders = fa
     errors.push({ code: 'product-inactive', field: 'productId' });
   }
   if (product.status === 'coming-soon') errors.push({ code: 'not-on-sale', field: 'productId' });
+  /**
+   * The rail under Privilege, enforced where money is decided and not only where a
+   * button is drawn. `isPurchasable` hid the upgrade when no venue honours the card,
+   * but a checkout posted straight to the API went through `validateLine` alone and
+   * sold a card with nothing behind it — latent at LunArt, where venues exist, and
+   * live at Bella Vigna, where no agreement is confirmed yet.
+   */
+  if (product.requiresPartners && cardPartners().length === 0) {
+    errors.push({ code: 'not-on-sale', field: 'productId', reason: 'no-card-partner' });
+  }
   if (product.purchaseMode === 'request-only') errors.push({ code: 'request-only', field: 'productId' });
 
   const variant = getVariant(product, line.variantId);

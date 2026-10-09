@@ -5,6 +5,11 @@
  * actually offered it. The form only shows free slots, but the form is a
  * convenience — the server checks the same schedule again, so a hand-written
  * request naming three in the morning gets the same answer as a mis-click.
+ *
+ * The prices are LunArt's, carried as placeholders until Bella Vigna confirms
+ * them: a production server sells no appointment today, a preview sells them at
+ * LunArt's figures. The booking flow itself is proved as if they were confirmed
+ * (`test/support/property.mjs`), because that is the day it has to work.
  */
 
 import test, { before, after } from 'node:test';
@@ -14,11 +19,12 @@ import { createApp } from '../server/app.js';
 import { createStore } from '../server/store.js';
 import { createMockStripe } from '../server/stripe.js';
 import { validateLine, priceCart, getProduct, getVariant, skuFor } from '../commerce/ordering.js';
-import { resolvePrice } from '../commerce/prices.js';
+import { resolvePrice, isSellable } from '../commerce/prices.js';
 import { applySchedule, slotsFor, daysWithSlots, isSlotOffered, MANUAL_SCHEDULE } from '../commerce/schedule.js';
 import { devSchedule } from '../commerce/schedule.dev.js';
 import { propertyDate } from '../commerce/time.js';
 import { COMMERCE_CATEGORIES } from '../commerce/schema.js';
+import { asIfConfirmed } from './support/property.mjs';
 
 const SCHEDULE = devSchedule();
 const DAY = daysWithSlots('hair-service', SCHEDULE)[0];
@@ -26,7 +32,7 @@ const TIME = slotsFor('hair-service', DAY, SCHEDULE)[0].time;
 
 const line = (over = {}) => ({
   productId: 'hair-service', variantId: 'men-cut', quantity: 1,
-  date: DAY, time: TIME, room: '303',
+  date: DAY, time: TIME, room: 'Deluxe',
   fields: { guestName: 'Jacopo Lunardi', phone: '+39 392 472 5263' },
   ...over,
 });
@@ -43,16 +49,38 @@ test('the service has a category of its own in the shop', () => {
   assert.equal(getProduct('hair-service').category, 'hair');
 });
 
-test('the prices are the ones LunArt set, and they live server-side', () => {
-  const expected = {
-    'men-cut': 4900, 'men-beard': 3500, 'men-cut-beard': 6900,
-    'women-blowdry': 7900, 'women-cut-blow': 9500, 'women-evening': 8900,
-  };
+/** LunArt's prices for the service, which Bella Vigna starts from. */
+const LUNART_HAIR = {
+  'men-cut': 4900, 'men-beard': 3500, 'men-cut-beard': 6900,
+  'women-blowdry': 7900, 'women-cut-blow': 9500, 'women-evening': 8900,
+};
+
+test('the prices are LunArt’s, live server-side, and are not yet confirmed for Bella Vigna', () => {
   const product = getProduct('hair-service');
-  for (const [variantId, amount] of Object.entries(expected)) {
-    const price = resolvePrice(skuFor(product, getVariant(product, variantId)));
+  for (const [variantId, amount] of Object.entries(LUNART_HAIR)) {
+    const sku = skuFor(product, getVariant(product, variantId));
+    const price = resolvePrice(sku);
     assert.equal(price.amount, amount, variantId);
-    assert.equal(price.status, 'confirmed', variantId);
+    assert.equal(price.status, 'placeholder', variantId);
+    assert.match(price.source, /LunArt/, `${variantId} says whose price it is`);
+    assert.equal(isSellable(sku), false, `${variantId} must not sell in production`);
+    assert.equal(isSellable(sku, { allowPlaceholders: true }), true, `${variantId} sells in the preview`);
+  }
+});
+
+test('confirmed, the same prices sell in production unchanged', () => {
+  const restore = asIfConfirmed();
+  try {
+    const product = getProduct('hair-service');
+    for (const [variantId, amount] of Object.entries(LUNART_HAIR)) {
+      const sku = skuFor(product, getVariant(product, variantId));
+      const price = resolvePrice(sku);
+      assert.equal(price.amount, amount, variantId);
+      assert.equal(price.status, 'confirmed', variantId);
+      assert.ok(isSellable(sku), variantId);
+    }
+  } finally {
+    restore();
   }
 });
 
@@ -126,10 +154,26 @@ test('a day nobody offered cannot be bought either', () => {
   assert.ok(result.errors.some((e) => e.code === 'slot-unavailable'));
 });
 
-test('an offered time is accepted and priced', () => {
-  const result = validateLine(line());
-  assert.equal(result.ok, true, JSON.stringify(result.errors));
-  assert.equal(result.amount, 4900);
+test('an offered time is accepted, and refused in production only for its price', () => {
+  // Bella Vigna today: the time is fine, the price is not confirmed.
+  const production = validateLine(line());
+  assert.equal(production.ok, false);
+  assert.deepEqual(production.errors.map((e) => e.code), ['price-not-confirmed'], 'nothing else is wrong with it');
+
+  // The preview sells it at LunArt's figure.
+  const preview = validateLine(line(), { allowPlaceholders: true });
+  assert.equal(preview.ok, true, JSON.stringify(preview.errors));
+  assert.equal(preview.amount, 4900);
+
+  // And confirmed, so does production.
+  const restore = asIfConfirmed();
+  try {
+    const result = validateLine(line());
+    assert.equal(result.ok, true, JSON.stringify(result.errors));
+    assert.equal(result.amount, 4900);
+  } finally {
+    restore();
+  }
 });
 
 test('the schedule decides, not the shape of the time', () => {
@@ -150,14 +194,18 @@ test('the service needs the details whoever turns up will want', () => {
 
 /* ── Through the API ─────────────────────────────────────────────────────── */
 
-test('the booking flow, end to end', async () => {
+test('the booking flow, end to end', async (t) => {
+  // A server configured as production is, whatever the environment running the
+  // tests says: placeholder prices refused, no preview fixtures.
   const app = await createApp({
     store: createStore(), stripe: createMockStripe(),
+    allowPlaceholderPrices: false, useDevPrices: false, seed: false,
     cardSigningKey: 'hair-test-key', mode: 'development', publicUrl: 'http://127.0.0.1',
   });
   applySchedule(SCHEDULE);   // createApp may reset it when dev prices are off
   const server = app.listen(0);
   await new Promise((resolve) => server.once('listening', resolve));
+  t.after(() => server.close());
   const base = `http://127.0.0.1:${server.address().port}`;
 
   const call = async (path, body) => {
@@ -176,10 +224,24 @@ test('the booking flow, end to end', async () => {
   const { body: onDay } = await call(`/api/availability/hair-service?date=${DAY}`);
   assert.ok(onDay.slots.some((slot) => slot.time === TIME));
 
+  // At Bella Vigna today the hour is on offer and the price is not confirmed, so
+  // the server refuses the booking — for that reason and no other.
+  const { status: today, body: gated } = await call('/api/checkout', {
+    lang: 'it',
+    customer: { name: 'Jacopo Lunardi', email: 'jacopo@example.com', phone: '+39392', room: 'Deluxe' },
+    lines: [line({ variantId: 'women-cut-blow' })],
+  });
+  assert.equal(today, 422);
+  assert.deepEqual(gated.errors.map((e) => e.code), ['price-not-confirmed']);
+  assert.deepEqual(await app.store.orders.list({}), []);
+
+  // From here on, the day the operator confirms the prices.
+  t.after(asIfConfirmed());
+
   // A tampered price buys nothing cheaper.
   const { body: checkout } = await call('/api/checkout', {
     lang: 'it',
-    customer: { name: 'Jacopo Lunardi', email: 'jacopo@example.com', phone: '+39392', room: '303' },
+    customer: { name: 'Jacopo Lunardi', email: 'jacopo@example.com', phone: '+39392', room: 'Deluxe' },
     lines: [{ ...line({ variantId: 'women-cut-blow' }), amount: 1, price: 1, total: 1 }],
   });
   assert.equal(checkout.amount, 9500, 'the server priced it from the catalogue');
@@ -192,7 +254,7 @@ test('the booking flow, end to end', async () => {
   assert.equal(order.lines.length, 1);
   assert.equal(order.lines[0].date, DAY, 'the day is on the order');
   assert.equal(order.lines[0].time, TIME, 'and so is the time');
-  assert.equal(order.lines[0].room, '303');
+  assert.equal(order.lines[0].room, 'Deluxe');
   assert.equal(order.amount, 9500);
 
   // Everything whoever turns up will need is recorded.
@@ -215,14 +277,12 @@ test('the booking flow, end to end', async () => {
   });
   assert.equal(status, 422);
   assert.ok(refused.errors.some((e) => e.code === 'slot-unavailable'));
-
-  server.close();
 });
 
 test('a basket can hold a haircut alongside everything else', () => {
   const cart = priceCart([
     line(),
-    { productId: 'wine-in-room', variantId: 'brunello', quantity: 1, date: DAY, slotId: 'w-1900', room: '303' },
+    { productId: 'wine-in-room', variantId: 'brunello', quantity: 1, date: DAY, slotId: 'w-1900', room: 'Deluxe' },
   ], { allowPlaceholders: true });
   assert.equal(cart.ok, true, JSON.stringify(cart.errors));
   assert.equal(cart.total, 4900 + 8900);

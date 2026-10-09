@@ -69,6 +69,17 @@ export const roomIdFor = (token) => BY_SPELLING.get(String(token ?? '').trim().t
 /** True for exactly the strings this property uses as room ids. */
 export const isRoomId = (value) => ROOM_IDS.includes(String(value ?? '').trim());
 
+/**
+ * How a room is typed into a form: a number pad where every room is a number
+ * (LunArt's 301–306), a keyboard where rooms have names (Bella Vigna's), and a
+ * placeholder that is one of the property's own rooms rather than another's.
+ */
+export const ROOM_INPUT = {
+  inputmode: ROOM_IDS.every((id) => /^\d+$/.test(id)) ? 'numeric' : 'text',
+  placeholder: ROOM_IDS[0] ?? '',
+  maxlength: Math.max(6, ...ROOM_IDS.map((id) => id.length)),
+};
+
 /** Registry order, which for numbered rooms is ascending. */
 const ORDER = new Map(ROOM_IDS.map((id, index) => [id, index]));
 

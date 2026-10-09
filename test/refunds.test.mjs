@@ -16,7 +16,7 @@
  * working stops working everywhere a door would ask.
  */
 
-import test from 'node:test';
+import test, { before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 
@@ -32,12 +32,23 @@ import { buildReservation } from '../server/reservations.js';
 import { applyPriceOverrides } from '../commerce/prices.js';
 import { DEV_PRICES } from '../commerce/prices.dev.js';
 import { propertyDate, addDays } from '../commerce/time.js';
+import { confirmAllAgreements, restoreAgreements } from './support/property.mjs';
+
+/**
+ * Every order refunded here carries a Privilege Card, and at Bella Vigna no venue
+ * honours the card yet, so the checkout would refuse to sell one at all
+ * (`no-card-partner`). This file is about what a refund does to a card that was
+ * sold, so it runs with the shared network's agreements as if confirmed — through
+ * the same seam the server uses — and puts the real register back afterwards.
+ */
+before(() => confirmAllAgreements());
+after(() => restoreAgreements());
 
 const SIGNING_KEY = 'refund-test-signing-key';
 const PERIOD = 60;
 
 const soon = (days) => addDays(propertyDate(), days);
-const CUSTOMER = { name: 'Jacopo Lunardi', email: 'jacopo@example.invalid', room: '303' };
+const CUSTOMER = { name: 'Jacopo Lunardi', email: 'jacopo@example.invalid', room: 'Deluxe' };
 
 /**
  * A server, a stay, and whatever was bought against it.
@@ -57,7 +68,7 @@ async function shop(t, { lines, withStay = true } = {}) {
     ? await store.reservations.create(buildReservation({
       source: 'quovai', booking_reference: `REF-${randomUUID().slice(0, 6)}`,
       first_name: 'Jacopo', last_name: 'Lunardi', guest_email: 'jacopo@example.invalid',
-      check_in: propertyDate(), check_out: soon(4), room: '303', adults: 2,
+      check_in: propertyDate(), check_out: soon(4), room: 'Deluxe', adults: 2,
     }))
     : null;
 
@@ -115,7 +126,7 @@ const CARD_LINE = {
   date: propertyDate(), fields: { holderName: 'Jacopo Lunardi' },
 };
 const BREAKFAST = {
-  productId: 'light-breakfast', quantity: 2, date: soon(2), slotId: 'b-0900', room: '303',
+  productId: 'light-breakfast', quantity: 2, date: soon(2), slotId: 'b-0900', room: 'Deluxe',
 };
 
 /** The charge Stripe sends with `charge.refunded`. */
@@ -570,7 +581,7 @@ test('H refunding one order touches no other order or card', async (t) => {
   const other = await store.reservations.create(buildReservation({
     source: 'quovai', booking_reference: 'OTHER-1',
     first_name: 'Irene', last_name: 'Cappellini', guest_email: 'irene@example.invalid',
-    check_in: propertyDate(), check_out: soon(4), room: '302', adults: 2,
+    check_in: propertyDate(), check_out: soon(4), room: 'Standard', adults: 2,
   }));
   const server = app.listen(0);
   await new Promise((resolve) => server.once('listening', resolve));

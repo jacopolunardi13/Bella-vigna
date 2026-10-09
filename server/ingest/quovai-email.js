@@ -606,7 +606,13 @@ function roomsFromTable(textBody, labelled, { notes = '' } = {}) {
 
   const lines = textBody.split('\n');
   const bare = (line) => line.replace(/\|/g, ' ').replace(/\s+/g, ' ').trim().toLowerCase();
-  const noteLines = new Set(String(notes).split('\n').map((line) => line.trim()).filter(Boolean));
+  /**
+   * Whatever the guest typed is prose, wherever it sits: on a line of its own, or
+   * after a "Note:" label on the same line. Matching the whole line only missed the
+   * second shape, and "Note: vorremmo la camera con terrazza" was read as a room.
+   */
+  const noteText = String(notes).split('\n').map((line) => line.trim()).filter(Boolean);
+  const isNote = (line) => noteText.some((note) => line.includes(note));
 
   /** A room at the head of a table row — and not a price, a quantity or a total. */
   const leadingRoom = (line) => {
@@ -625,7 +631,7 @@ function roomsFromTable(textBody, labelled, { notes = '' } = {}) {
     for (; i < limit; i += 1) {
       // The next table's heading row is where this one ends.
       if (TABLE_HEADERS.has(bare(lines[i]))) break;
-      if (noteLines.has(lines[i].trim())) continue;
+      if (isNote(lines[i])) continue;
       const room = leadingRoom(lines[i]);
       if (room) found.add(room);
     }
@@ -641,7 +647,7 @@ function roomsFromTable(textBody, labelled, { notes = '' } = {}) {
    */
   const loose = new Set();
   for (const line of lines) {
-    if (noteLines.has(line.trim())) continue;
+    if (isNote(line)) continue;
     const match = LOOSE_ROOM.exec(line);
     if (match) loose.add(roomIdFor(match[1]));
   }
@@ -651,9 +657,11 @@ function roomsFromTable(textBody, labelled, { notes = '' } = {}) {
   // shape written without a colon.
   const named = new Set();
   for (const line of lines) {
-    if (noteLines.has(line.trim())) continue;
+    if (isNote(line)) continue;
     if (!/\b(camera|camere|room|rooms|stanza|stanze|alloggio)\b/i.test(line)) continue;
-    for (const room of roomsOf(line)) named.add(room);
+    // Only the part before the first pipe: "Camera Terrazza | Tariffa: standard
+    // non rimborsabile" names one room, and "standard" there is a rate.
+    for (const room of roomsOf(line.split('|')[0])) named.add(room);
   }
   return roomsOf([...named]);
 }

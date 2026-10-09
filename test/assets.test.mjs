@@ -81,36 +81,38 @@ test('no stylesheet asset is addressed through a custom property', async () => {
 });
 
 test('the Pass wears the artwork, at both densities', async () => {
-  // The crop the card uses, so it can be rebuilt or re-framed: a 1152 × 745 window on
-  // "Il movimento e la stratificazione di Firenze nel tempo", LunArt's own painting.
-  assert.ok(await exists(resolve(ROOT, 'assets/img/_src/pass/lunart-opera.jpg')), 'the artwork source is kept');
-
-  // And the breakfast voucher it replaced, kept as the fallback it was asked to be —
-  // under `_archive`, which `optimize-images` skips, so it is a source we hold rather
-  // than four files in every deployment that nothing asks for.
-  assert.ok(await exists(resolve(ROOT, 'assets/img/_src/_archive/pass/lunart-voucher.jpg')), 'the voucher is kept too');
+  // Bella Vigna's card is composed from the property's own logo — its skyline and
+  // its vines in gold on warm paper — by a script that is committed with its source,
+  // so it can be rebuilt or re-framed rather than edited by hand.
+  assert.ok(await exists(resolve(ROOT, 'assets/img/_src/brand/bella-vigna-logo.png')), 'the logo the artwork is cut from is kept');
+  assert.ok(await exists(resolve(ROOT, 'tools/make-bella-vigna-assets.py')), 'and so is the recipe');
 
   // The two widths the card actually uses: 1x on a plain screen, 2x on a phone.
   for (const width of [700, 1024]) {
-    assert.ok(await exists(resolve(ROOT, `assets/img/pass/lunart-opera-${width}.webp`)), `lunart-opera-${width}.webp`);
+    assert.ok(await exists(resolve(ROOT, `assets/img/pass/bella-vigna-pass-${width}.webp`)), `bella-vigna-pass-${width}.webp`);
   }
 
   // Nothing heavy reaches a guest. The 1024 is what a dense phone takes.
-  const { size } = await stat(resolve(ROOT, 'assets/img/pass/lunart-opera-1024.webp'));
+  const { size } = await stat(resolve(ROOT, 'assets/img/pass/bella-vigna-pass-1024.webp'));
   assert.ok(size < 160 * 1024, `the served artwork stays small (${(size / 1024).toFixed(0)} KB)`);
 });
 
 test('only the artwork in use is served', async () => {
-  /**
-   * The voucher's own derivatives were deleted when the painting replaced it. They
-   * are one command away — `node tools/optimize-images.mjs` rebuilds them from the
-   * source that is still committed — and until something references them they are
-   * four files in every deployment that nothing asks for.
-   */
+  // LunArt's painting is LunArt's: none of its files may travel with this guide.
   const { readdir } = await import('node:fs/promises');
   const served = await readdir(resolve(ROOT, 'assets/img/pass'));
   const stems = new Set(served.map((f) => f.replace(/-\d+\.(webp|jpg)$/, '')));
-  assert.deepEqual([...stems].sort(), ['lunart-opera'], 'one artwork in the served tree');
+  assert.deepEqual([...stems].sort(), ['bella-vigna-pass'], 'one artwork in the served tree');
+});
+
+test('no LunArt image travels with the Bella Vigna guide', async () => {
+  // Property Pack §2: Bella Vigna's own photographs only. A LunArt file name anywhere
+  // under assets/img would be a LunArt picture shown to a Bella Vigna guest.
+  const { readdir } = await import('node:fs/promises');
+  const walk = async (dir) => (await Promise.all((await readdir(dir, { withFileTypes: true }))
+    .map((e) => (e.isDirectory() ? walk(resolve(dir, e.name)) : [resolve(dir, e.name)])))).flat();
+  const files = (await walk(resolve(ROOT, 'assets/img'))).map((f) => relative(ROOT, f));
+  assert.deepEqual(files.filter((f) => /lunart|arno|ponte-vecchio|30[1-6]-/i.test(f)), []);
 });
 
 test('one artwork serves every card face', async () => {
@@ -144,47 +146,40 @@ test('the card ink and the washes are each defined once', async () => {
 });
 
 test('the brand mark hook and its README agree on one path', async () => {
-  const brand = await readFile(resolve(ROOT, 'src/ui/brand.js'), 'utf8');
-  const path = /BRAND_WORDMARK = '([^']+)'/.exec(brand)?.[1];
-  assert.ok(path, 'src/ui/brand.js exports the path it looks for');
-  assert.equal(path, 'assets/img/brand/lunart-wordmark.svg');
+  // The path is no longer a literal in the hook: it is the property's, in
+  // `data/brand.js`, which the header, the Pass and the venue card all read.
+  const { brand } = await import('../data/brand.js');
+  const { BRAND_WORDMARK } = await import('../src/ui/brand.js');
+  assert.equal(BRAND_WORDMARK, brand.mark);
+  assert.equal(BRAND_WORDMARK, 'assets/img/brand/bella-vigna-mark.webp');
 
   const readme = await readFile(resolve(ROOT, 'assets/img/brand/README.md'), 'utf8');
   assert.ok(
-    readme.includes('lunart-wordmark.svg'),
+    readme.includes('bella-vigna-mark.webp'),
     'the README names the file the code looks for, so the person providing it has one answer',
   );
 });
 
-test('the real LunArt mark is there, and is the artwork’s own shape', async () => {
+test('the Bella Vigna mark is there, and is the logo’s own script', async () => {
   /**
-   * This test used to assert the opposite — that no wordmark had been provided and
-   * the header fell back to type on purpose. LunArt supplied the artwork, so it now
-   * asserts the thing that actually matters: that the file is a usable mark and that
-   * it still carries the proportions of the original rather than some convenient
-   * square.
+   * The header mark is the "Bella Vigna" script cut out of the classic gold logo —
+   * not redrawn, not set in a font that looks close. Its proportions are the
+   * script's own (about 3.8 : 1), which is what lets the header size it by height.
    */
-  const file = resolve(ROOT, 'assets/img/brand/lunart-wordmark.svg');
+  const file = resolve(ROOT, 'assets/img/brand/bella-vigna-mark.webp');
   assert.ok(await exists(file), 'the mark is committed');
+  const bytes = await readFile(file);
+  assert.equal(bytes.subarray(0, 4).toString('ascii'), 'RIFF', 'it is a WebP');
+  assert.equal(bytes.subarray(8, 12).toString('ascii'), 'WEBP');
+  // VP8X carries the canvas size (24-bit, minus one) at bytes 24–29 when alpha is present.
+  assert.equal(bytes.subarray(12, 16).toString('ascii'), 'VP8X', 'with an alpha channel, so it sits on any paper');
+  const width = 1 + bytes.readUIntLE(24, 3);
+  const height = 1 + bytes.readUIntLE(27, 3);
+  const ratio = width / height;
+  assert.ok(ratio > 3.4 && ratio < 4.2, `the script's own proportions are preserved (${ratio.toFixed(2)}:1)`);
 
-  const svg = await readFile(file, 'utf8');
-  assert.match(svg, /^<svg\b/, 'it is an SVG and nothing else');
-  assert.ok(!/<script/i.test(svg), 'with no script in it');
-  assert.match(svg, /fill="currentColor"/, 'drawn in the ink it is given');
-  assert.match(svg, /aria-label="LunArt"/, 'and named, since it replaces the words');
-
-  // 885 × 532 trimmed to the ink — about 1.66 : 1. The header sizes by height and
-  // lets the width follow, so the file is the only place this is written down.
-  const [, w, h] = /viewBox="0 0 (\d+) (\d+)"/.exec(svg) ?? [];
-  assert.ok(w && h, 'it carries a viewBox');
-  const ratio = Number(w) / Number(h);
-  assert.ok(ratio > 1.6 && ratio < 1.73, `the artwork's own proportions are preserved (${ratio.toFixed(3)}:1)`);
-
-  // No width/height attributes, or the header could not size it.
-  assert.ok(!/<svg[^>]*\swidth=/.test(svg), 'and no baked-in width');
-
-  // The source it was traced from is kept, so it can be rebuilt or replaced.
-  assert.ok(await exists(resolve(ROOT, 'assets/img/_src/brand/lunart-logo.png')), 'the original is kept');
+  // The source it was cut from is kept, so it can be rebuilt or replaced.
+  assert.ok(await exists(resolve(ROOT, 'assets/img/_src/brand/bella-vigna-logo.png')), 'the original is kept');
 });
 
 test('the custom-property rule would catch the bug it was written for', async () => {

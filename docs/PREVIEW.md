@@ -1,87 +1,67 @@
-# The private preview
+# Bella Vigna — staging (anteprima privata)
 
-A full LunArt v2 — the real Node server, the guide, the shop, the Staff app, the
-reservation half — running on a temporary URL, with everything that could reach a
-real person switched off.
+La Guest Guide Bella Vigna completa — server Node reale, guida, Extras, Pass, Staff,
+prenotazioni — su un URL temporaneo, con spento tutto ciò che potrebbe raggiungere
+una persona reale. Servizio indipendente da LunArt: altro URL, altro token Staff,
+altra chiave delle card, nessun dato in comune.
 
-It deploys from `fable/guest-guide-v2`. It does not touch `main`, and it has nothing
-to do with the GitHub Pages site, which is published separately and is unaffected.
+Il deploy parte dal branch di lavoro `ccr-412adc5b-p2jc5l`. Non tocca `main`, LunArt,
+né alcuna produzione.
 
-## Why a server and not a static host
+## Avviarlo in locale (nessun account necessario)
 
-The static guide works on Pages, but half of v2 is not static: the commerce API, the
-personal guide links, the Staff app, the mock checkout and the scheduler all need a
-process that stays up and keeps state. Render runs exactly that from a GitHub branch
-with no rewrite, which is why it is the host in `render.yaml`. Any host that runs
-`node server/index.js` works the same way; the blueprint is the only Render-specific
-file in the repository.
+```sh
+npm ci
+GUIDE_PREVIEW=1 STAFF_TOKEN=prova node server/index.js
+# poi apri http://localhost:4173/preview
+```
 
-## What Jacopo has to do
+## Pubblicarlo su Render (operazione dell'operatore)
 
-Four clicks and one copy. Everything else is in `render.yaml`.
+1. https://render.com → accesso con GitHub → autorizzare la sola lettura del
+   repository `jacopolunardi13/Bella-vigna`.
+2. **New + → Blueprint** → repository `Bella-vigna` → Render legge `render.yaml`
+   dal branch `ccr-412adc5b-p2jc5l` → **Apply**.
+3. Servizio `bella-vigna-preview` → **Environment** → leggere `STAFF_TOKEN`
+   (generato da Render, diverso da quello di LunArt).
+4. Aprire `https://<servizio>.onrender.com/preview`.
 
-1. **Create the account.** Go to <https://render.com> → **Get Started** → **GitHub**,
-   and authorise Render for the `jacopolunardi13/lunart` repository. Render only
-   needs read access to deploy.
-2. **Deploy the blueprint.** Dashboard → **New +** → **Blueprint** → pick
-   `jacopolunardi13/lunart` → Render finds `render.yaml` on
-   `fable/guest-guide-v2` → **Apply**. The first build takes two or three minutes.
-3. **Read the Staff token.** Open the `lunart-preview` service → **Environment** →
-   the value next to `STAFF_TOKEN`. Render generated it; nobody else has seen it.
-4. **Open the preview.** The service's URL ends in `.onrender.com`. Start at
-   `/preview`, which lists everything else — including the personal guest links,
-   which change whenever the service restarts.
-
-## What the preview is
+## Cosa contiene
 
 | | |
 |---|---|
-| `/preview` | the front door: every link, and what is switched off |
-| `/` | the guide as a guest sees it without a personal link |
-| `/g/<token>` | a guest's own link — greeting, room, dates, the card bound to the stay |
-| `/recover` | a lost link, from a surname and a booking number |
-| `/staff` | LunArt Staff — asks for the token once, then remembers it on the device |
-| `/partner/opera-caffe` | the page a venue keeps on its home screen |
-| `/validate-card` | the generic venue page |
-| `/api/health` | what is configured, and what is deliberately off |
+| `/preview` | la porta d'ingresso: tutti i link e cosa è spento |
+| `/` | la guida come la vede chi non ha un link personale |
+| `/g/<token>` | due prenotazioni **inventate** (camere Standard e Terrazza), con Pass |
+| `/?review=1` | ogni dato ancora da confermare, nel suo contesto (non visibile agli ospiti) |
+| `/recover` | link perso: cognome + numero di prenotazione |
+| `/staff` | Bella Vigna Staff (chiede il token una volta) |
+| `/validate-card` | pagina venue generica |
+| `/api/health` | cosa è configurato e cosa è spento |
 
-`/api/health` is worth one note: in a preview every integration reads
-`disabled-in-preview` rather than `credentials-missing`. The difference matters —
-nothing is waiting for a value to be filled in, so nobody should go looking for one.
+## Cosa è spento, e come
 
-## What is switched off, and how
+`GUIDE_PREVIEW=1` viene letto per primo in `server/config.js` e **impedisce di leggere**
+le credenziali, non si limita a non usarle:
 
-`LUNART_PREVIEW=1` is read in `server/config.js` before anything else. It does not
-default things to safe values — it refuses to read the dangerous ones:
+| | in staging |
+|---|---|
+| Pagamenti | checkout finto interno: nessuna carta, nessun addebito |
+| Email agli ospiti | preparate e conservate, mai spedite |
+| Casella QuoVai | non letta: le prenotazioni sono inventate |
+| Calendario parrucchiere | non letto né scritto |
+| Push | registrate, non inviate |
+| Password Wi-Fi | mai letta, mai servita |
+| Prezzi | i placeholder (prezzi LunArt) sono vendibili, per provare ogni flusso |
+| Privilege | **non acquistabile**: nessun accordo partner è confermato per Bella Vigna, e non si inventa un partner dimostrativo |
 
-| | in the preview | why it cannot go wrong |
-|---|---|---|
-| Payments | the built-in stand-in | `STRIPE_SECRET_KEY` is not read at all |
-| Guest email | rendered, kept, never sent | `MAIL_PROVIDER` is not read |
-| QuoVai mailbox | not read; reservations are invented | the Gmail credentials are not read |
-| Hair calendar | not read, not written | the service-account values are not read |
-| Push | recorded, not sent | the VAPID keys are not read |
-| Prices | provisional ones included | so every flow can actually be walked |
+## Da sapere
 
-Paste a live key into that service by mistake and nothing happens: the value is
-never read while `LUNART_PREVIEW` is on.
+- **Si addormenta**: sul piano gratuito il servizio si ferma dopo ~15 minuti senza
+  traffico; la prima richiesta dopo impiega ~30 secondi.
+- **Dimentica**: niente disco. A ogni riavvio rigenera le due prenotazioni inventate
+  con nuovi link personali, per questo `/preview` li legge al momento.
 
-The Staff API is additionally behind `STAFF_TOKEN`, and because the service runs
-with `NODE_ENV=production` it refuses every staff request when no token is set,
-rather than falling open the way a development server does.
+## Spegnerlo
 
-## Two things to expect
-
-**It sleeps.** On Render's free plan the service stops after about fifteen minutes
-of no traffic and takes thirty seconds or so to answer the first request after that.
-That is the free plan, not a bug.
-
-**It forgets.** There is no database: orders, cards and reservations live in memory.
-When the service restarts it reseeds the same two invented reservations — with new
-personal links, which is why `/preview` reads them live rather than printing them
-once. Anything bought during a demo is gone after a restart, which for a
-demonstration is a feature.
-
-## Taking it down
-
-Render → the service → **Settings** → **Delete Service**. Nothing else is affected.
+Render → servizio → **Settings → Delete Service**. Nient'altro è coinvolto.

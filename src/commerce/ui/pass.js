@@ -20,7 +20,7 @@
 import { esc } from '../../ui/dom.js';
 import { icon } from '../../ui/icons.js';
 import { UI, fill } from '../../i18n.js';
-import { roomsIn, roomList } from '../../../commerce/rooms.js';
+import { roomsIn, roomList, roomLabel } from '../../../commerce/rooms.js';
 import { guestPass } from '../../guest.js';
 import { openCustomSheet } from '../../ui/sheet.js';
 import { stayBenefits, cardBenefits, partnerNetwork } from '../api.js';
@@ -43,7 +43,7 @@ import { brand } from '../../../data/brand.js';
  * rather than a broken frame.
  *
  * ── Replacing this with the final artwork ─────────────────────────────────────
- * Drop the file at `assets/img/_src/pass/lunart-pass.jpg` (and
+ * Rebuild it with `tools/make-bella-vigna-assets.py` (and
  * `lunart-pass-privilege.jpg`), run `node tools/optimize-images.mjs`, and the card
  * wears it. No code change, no CSS change, no build step.
  */
@@ -215,7 +215,7 @@ export function passFace(pass, lang, { size = 'preview' } = {}) {
       <div class="pass__foot">
         <div class="pass__detail">
           <p class="pass__line">
-            ${pass.room ? `${esc(UI[lang].roomLabel)} ${esc(pass.room)}` : ''}${pass.room && dates ? ' · ' : ''}${esc(dates)}
+            ${pass.room ? `${esc(UI[lang].roomLabel)} ${esc(roomLabel(pass.room, lang))}` : ''}${pass.room && dates ? ' · ' : ''}${esc(dates)}
           </p>
           <p class="pass__state" data-pass-state>${esc(state)}</p>
         </div>

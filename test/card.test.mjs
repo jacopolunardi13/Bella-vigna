@@ -5,6 +5,16 @@
  * card. A code works for a minute, works once, and only while the card behind it
  * is good — so a screenshot, a forwarded photo, or a card that has since been
  * revoked all fail, and they fail on the server, where the phone has no say.
+ *
+ * ── Bella Vigna ─────────────────────────────────────────────────────────────
+ *
+ * Whether a card is good is a fact about the card, and nothing here depends on the
+ * property. What a venue is told to give is a fact about the register — and for
+ * Bella Vigna no agreement is confirmed yet, so a good card is told of nothing, at
+ * any door. That is asserted as it is. What a venue is shown once an agreement
+ * holds runs under `confirmed()`: every LunArt agreement (and price) as if
+ * confirmed for Bella Vigna, through the seams the server uses, and the real
+ * register put back afterwards.
  */
 
 import test from 'node:test';
@@ -16,9 +26,26 @@ import {
 } from '../server/card.js';
 import { createStore } from '../server/store.js';
 import { propertyTimeToInstant } from '../commerce/time.js';
+import {
+  PROPERTY_AGREEMENTS, PARTNERSHIP_STATUS, benefitPartnerView, partnerView,
+} from '../commerce/partners.js';
+import { asIfConfirmed } from './support/property.mjs';
 
 const KEY = 'a-test-signing-key-which-never-leaves-the-server';
 const PERIOD = 60;
+
+/**
+ * A test about what a venue is shown once its agreement holds: every LunArt
+ * agreement and price confirmed for the body, the real register put back after.
+ */
+const confirmed = (body) => async (t) => {
+  const restore = asIfConfirmed();
+  try {
+    return await body(t);
+  } finally {
+    restore();
+  }
+};
 
 async function freshCard(over = {}) {
   const store = createStore();
@@ -120,7 +147,7 @@ test('the code changes with the window and carries nothing readable', async () =
 test('the QR points a camera at the validation page and nothing else', async () => {
   const { card } = await freshCard();
   const code = currentCode(card, { signingKey: KEY, periodSeconds: PERIOD, now: during });
-  const url = new URL(qrPayload('https://guide.lunart.example', card, code.code));
+  const url = new URL(qrPayload('https://guide.bellavigna.example', card, code.code));
   assert.equal(url.pathname, '/validate-card');
   assert.equal(url.searchParams.get('c'), card.public_ref);
   assert.equal(url.searchParams.get('k'), code.code);
@@ -138,9 +165,22 @@ test('a current code validates, and says who is holding it', async () => {
   assert.equal(result.card.holder, 'Jacopo Lunardi');
   assert.equal(result.card.max_people, 2);
   assert.equal(result.card.valid_until, '2026-10-09');
-  assert.ok(result.benefits.length > 0, 'a venue is told what to give');
   assert.equal(result.card.id, undefined, 'the venue never sees the card id');
+  // Bella Vigna, today: the card is good and there is nothing agreed to give on it.
+  assert.deepEqual(result.benefits, [], 'no venue is told to give what nobody agreed');
 });
+
+test('once an agreement holds, a current code tells the venue what to give', confirmed(async () => {
+  const { store, card } = await freshCard();
+  const { code } = currentCode(card, { signingKey: KEY, periodSeconds: PERIOD, now: during });
+  const result = await validateCode({ reference: card.public_ref, code, store, signingKey: KEY, periodSeconds: PERIOD, now: during });
+
+  assert.equal(result.valid, true);
+  assert.equal(result.card.holder, 'Jacopo Lunardi');
+  assert.ok(result.benefits.length > 0, 'a venue is told what to give');
+  assert.ok(result.benefits.every((view) => view.partnership_status === PARTNERSHIP_STATUS.active));
+  assert.equal(result.card.id, undefined, 'the venue never sees the card id');
+}));
 
 test('the reference is case- and space-insensitive, as read off a screen', async () => {
   const { store, card } = await freshCard();
@@ -276,12 +316,38 @@ test('the holder sees their card, the venue sees only what it needs', async () =
   assert.equal(holder.state, 'active');
   assert.equal(holder.days, 5);
   assert.ok(Array.isArray(holder.benefits));
+  assert.deepEqual(holder.benefits, [], 'and, at Bella Vigna today, no venue listed on it');
   assert.equal(holder.access_token, undefined, 'even the holder view carries no token');
 });
 
 /* ── What a venue is told ────────────────────────────────────────────────── */
 
-test('a venue asking from its own page is told its own benefit', async () => {
+/**
+ * Bella Vigna, today. The three venues LunArt has an agreement with are waiting on
+ * Bella Vigna's own (`PROPERTY_AGREEMENTS`): they have no scanner page, and a good
+ * card scanned in their name — from a page somebody kept, or typed in by hand — is
+ * told of nothing to give. The card itself is still good, because that is true.
+ */
+test('a venue whose agreement is still pending is told of no benefit, and the card stays good', async () => {
+  const { store, card } = await freshCard();
+  const { code } = currentCode(card, { signingKey: KEY, periodSeconds: PERIOD, now: during });
+
+  const pending = Object.keys(PROPERTY_AGREEMENTS);
+  assert.deepEqual(pending.sort(), ['blue-velvet', 'le-firme', 'opera-caffe']);
+  for (const partnerId of pending) {
+    assert.equal(partnerView(partnerId).validation_url, null, `${partnerId} has no scanner page`);
+    assert.equal(benefitPartnerView(partnerId), null, `${partnerId} has no scanner view`);
+
+    const result = await validateCode({
+      reference: card.public_ref, code, store, signingKey: KEY, periodSeconds: PERIOD, now: during, partnerId,
+    });
+    assert.equal(result.valid, true, `${partnerId}: a pending agreement does not turn a good card red`);
+    assert.equal(result.partner, null, `${partnerId}: and offers it nothing`);
+    assert.deepEqual(result.benefits, [], `${partnerId}: not even a list to pick from`);
+  }
+});
+
+test('a venue asking from its own page is told its own benefit', confirmed(async () => {
   const { store, card } = await freshCard();
   const { code } = currentCode(card, { signingKey: KEY, periodSeconds: PERIOD, now: during });
 
@@ -293,9 +359,9 @@ test('a venue asking from its own page is told its own benefit', async () => {
   assert.equal(scoped.partner.partner, 'L\u2019Opera Caffè');
   assert.equal(scoped.partner.benefits[0].headline.it, '30% sul menù al tavolo');
   assert.equal(scoped.benefits.length, 1, 'one venue, not a list to choose from');
-});
+}));
 
-test('a door that gives two things is shown both of them', async () => {
+test('a door that gives two things is shown both of them', confirmed(async () => {
   const { store, card } = await freshCard();
   const { code } = currentCode(card, { signingKey: KEY, periodSeconds: PERIOD, now: during });
 
@@ -307,36 +373,47 @@ test('a door that gives two things is shown both of them', async () => {
   assert.equal(scoped.benefits.length, 1, 'still one venue');
   assert.equal(scoped.partner.benefits.length, 2,
     'the capped entry and the table discount are two separate things to honour');
-});
+}));
 
-test('a venue asking from the shared page is shown every benefit', async () => {
+test('a venue asking from the shared page is shown every benefit', confirmed(async () => {
   const { store, card } = await freshCard();
   const { code } = currentCode(card, { signingKey: KEY, periodSeconds: PERIOD, now: during });
   const result = await validateCode({ reference: card.public_ref, code, store, signingKey: KEY, periodSeconds: PERIOD, now: during });
   assert.equal(result.partner, null);
-  assert.ok(result.benefits.length >= 1);
-});
+  assert.deepEqual(result.benefits.map((view) => view.partner_id), ['opera-caffe', 'le-firme', 'blue-velvet']);
+}));
 
-test('an unknown or inactive partner does not turn a valid card red', async () => {
+test('an unknown or inactive partner does not turn a valid card red', confirmed(async () => {
+  // Asked with the agreements in force, so "no benefit" below is the venue's doing
+  // and not simply an empty register.
   const { store, card } = await freshCard();
   const { code } = currentCode(card, { signingKey: KEY, periodSeconds: PERIOD, now: during });
-  for (const partnerId of ['example-bar', 'does-not-exist']) {
+  for (const partnerId of ['example-bar', 'la-petite', 'does-not-exist']) {
     const result = await validateCode({
       reference: card.public_ref, code, store, signingKey: KEY, periodSeconds: PERIOD, now: during, partnerId,
     });
     assert.equal(result.valid, true, `${partnerId} should still validate the card`);
     assert.equal(result.partner, null, `${partnerId} should offer no benefit`);
   }
-});
+}));
 
-test('a venue never learns anything it does not need', async () => {
+const learnsNothing = async () => {
   const { store, card } = await freshCard();
   const { code } = currentCode(card, { signingKey: KEY, periodSeconds: PERIOD, now: during });
   const result = await validateCode({
     reference: card.public_ref, code, store, signingKey: KEY, periodSeconds: PERIOD, now: during, partnerId: 'opera-caffe',
   });
   const serialised = JSON.stringify(result);
-  for (const forbidden of [card.id, card.access_token, card.order_id, KEY, 'notes']) {
+  for (const forbidden of [card.id, card.access_token, card.order_id, KEY, 'notes', 'verify', 'staff_note']) {
     assert.ok(!serialised.includes(forbidden), `the scan result leaks ${forbidden}`);
   }
+  return result;
+};
+
+test('a venue never learns anything it does not need', async () => {
+  // Bella Vigna's register, where Opera Caffè's record carries an internal blocker…
+  assert.equal((await learnsNothing()).partner, null);
+  // …and with the agreement in force, where it carries LunArt's own notes.
+  const scoped = await confirmed(learnsNothing)();
+  assert.ok(scoped.partner, 'the second run really was scoped to a venue');
 });

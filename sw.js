@@ -53,7 +53,7 @@ const PRECACHE = [
   'assets/fonts/dm-sans.woff2',
   'assets/fonts/cormorant-garamond.woff2',
   'src/main.js',
-  'assets/img/property/terrazza-700.webp',
+  'assets/img/rooms/terrazza-esterno-700.webp',
   'manifest.webmanifest',
 ];
 

@@ -341,7 +341,7 @@ h3 { font-size: var(--step-1); }
 /* --- Facts, actions ------------------------------------------------------- */
 .facts { display: flex; flex-direction: column; gap: 2px; margin: 18px 0; }
 /* Stacked rather than label-left/value-right: inside the Concierge bubble the
-   row is only ~240px wide, and a side-by-side layout put "LOPERACAFFE62R"
+   row is only ~240px wide, and a side-by-side layout put "a fourteen-character password"
    underneath its own copy button. */
 .fact {
   display: flex; flex-direction: column; align-items: flex-start; gap: 5px;
@@ -1173,7 +1173,7 @@ fieldset.field { border: 0; padding: 0; }
  *
  * `background-position` is the framing: 50% 26% lifts the LA mark into the upper
  * half and opens the mist at the bottom for the guest's name. Replace the artwork by
- * dropping a file at `assets/img/_src/pass/lunart-voucher.jpg` and running
+ * rebuilding it with `python3 -I tools/make-bella-vigna-assets.py` and running
  * `node tools/optimize-images.mjs`; nothing here changes.
  */
 .pass::before {

@@ -32,6 +32,7 @@ import { createMockStripe } from '../server/stripe.js';
 import { previewPayload, activationWaitMs } from '../src/commerce/ui/card-sheet.js';
 import { propertyTimeToInstant } from '../commerce/time.js';
 import { UI } from '../src/i18n.js';
+import { brand } from '../data/brand.js';
 
 const KEY = 'a-test-signing-key-which-never-leaves-the-server';
 const PERIOD = 60;
@@ -56,7 +57,11 @@ async function stored(over = {}) {
 
 test('the preview encodes the reference behind an explicit inactive marker', () => {
   const payload = previewPayload('QD13Z5');
-  assert.equal(payload, 'lunart:privilege:inactive:QD13Z5');
+  // Marked with this property's own prefix: a preview from Bella Vigna's guide must
+  // not read as a LunArt card to anybody who decodes it.
+  assert.equal(payload, `${brand.storagePrefix}:privilege:inactive:QD13Z5`);
+  assert.equal(payload, 'bellavigna:privilege:inactive:QD13Z5');
+  assert.equal(/lunart/i.test(payload), false, 'no other house is named');
 
   // Nothing secret: the reference is already printed on the face of the card.
   assert.equal(/[0-9a-f]{16,}/i.test(payload), false, 'no token, no id, no key');
@@ -69,8 +74,9 @@ test('the preview is not a URL, so a phone camera opens nothing', () => {
 
   const preview = previewPayload('QD13Z5');
   assert.equal(preview.startsWith('http'), false);
-  // `lunart:` is not a scheme any browser will follow, which is the point.
-  assert.equal(new URL(preview).protocol, 'lunart:');
+  // `bellavigna:` is not a scheme any browser will follow, which is the point.
+  assert.equal(new URL(preview).protocol, `${brand.storagePrefix}:`);
+  assert.equal(new URL(preview).protocol, 'bellavigna:');
 });
 
 test('the preview carries no code at all', () => {
@@ -99,6 +105,10 @@ test('A · the server issues no code before the card starts', async () => {
     assert.equal(view.state, 'not-started');
     assert.equal(view.qr, null, 'no code');
     assert.equal(view.refreshIn, null, 'and nothing to come back for');
+    // The slot is drawn for a card that exists; what it is worth is the register's
+    // business, and on Bella Vigna's no agreement is confirmed — so no venue is
+    // listed under it.
+    assert.deepEqual(view.benefits, []);
     // And nothing resembling one travels with it either.
     const sent = JSON.stringify(view).toLowerCase();
     for (const leak of ['signing', 'secret', 'window', 'code"']) {

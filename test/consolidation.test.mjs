@@ -19,14 +19,18 @@ import { createMemoryMailbox } from '../server/ingest/mailbox.js';
 import { buildReservation } from '../server/reservations.js';
 import { applyPriceOverrides } from '../commerce/prices.js';
 import {
-  applyPartners, PARTNERS, cardPartners, stayPartners, stayBenefits, cardBenefits,
-  partnerView, inclusionOf,
+  applyPartners, PARTNERS, NETWORK, PARTNERSHIP_STATUS, cardPartners, stayPartners, stayBenefits, cardBenefits,
+  partnerView, inclusionOf, getPartner,
 } from '../commerce/partners.js';
 import { DEV_PRICES } from '../commerce/prices.dev.js';
 import { PRODUCTS, visibleVariants, publicProduct } from '../commerce/catalog.js';
 import { SERVICE_MINUTES, serviceMinutes } from '../commerce/schedule.js';
 import { isPurchasable } from '../commerce/index.js';
-import { rooms, plannedRooms } from '../data/rooms.js';
+import { rooms, plannedRooms, roomRegistry } from '../data/rooms.js';
+import { ROOM_IDS } from '../commerce/rooms.js';
+import { brand } from '../data/brand.js';
+import { confirmAllAgreements, restoreAgreements, confirmAllPrices } from './support/property.mjs';
+import { LUNART, REAL_RESERVATIONS } from './fixtures/quovai.js';
 import { UI } from '../src/i18n.js';
 import { propertyDate, addDays } from '../commerce/time.js';
 import { readFile } from 'node:fs/promises';
@@ -80,7 +84,7 @@ const reservation = async (over = {}) => {
     event: {
       kind: 'new', source: 'quovai', booking_reference: `HTTP-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
       first_name: 'Marta', last_name: 'Venturi', guest_email: 'marta@example.invalid',
-      check_in: today, check_out: addDays(today, 3), adults: 2, room: '303',
+      check_in: today, check_out: addDays(today, 3), adults: 2, room: 'Deluxe',
       message_id: `<${Math.random()}@q>`, ...over,
     },
   });
@@ -95,7 +99,7 @@ test('a personal link resolves over the API, with the card lengths that fit', as
 
   assert.equal(status, 200);
   assert.equal(body.first_name, 'Marta');
-  assert.equal(body.room, '303');
+  assert.equal(body.room, 'Deluxe');
   assert.equal(body.can_purchase, true);
   // A four-day stay: the 2-day card fits, the 5- and 8-day ones do not.
   assert.deepEqual(body.cardOptions.map((option) => option.variantId), ['2d']);
@@ -115,7 +119,8 @@ test('/g/<token> serves the guide itself, so the link opens the app', async () =
   const response = await fetch(`${base}/g/${booked.guide_token}`);
   const html = await response.text();
   assert.equal(response.status, 200);
-  assert.match(html, /<title>LunArt — Guest Guide<\/title>/);
+  assert.match(html, /<title>Bella Vigna — Guest Guide<\/title>/);
+  assert.equal(/lunart/i.test(html), false, 'and no other house is named on the page a guest opens');
 });
 
 test('the recovery page is served, and is not the guide', async () => {
@@ -199,14 +204,15 @@ test('a reservation can be created, edited, linked and cancelled from the staff 
   const created = await api('/api/staff/reservations', {
     body: {
       first_name: 'Diego', last_name: 'Prova', check_in: addDays(today, 4), check_out: addDays(today, 6),
-      room: '301', guest_email: 'diego@example.invalid', adults: 2,
+      room: 'Standard', guest_email: 'diego@example.invalid', adults: 2,
     },
   });
   assert.equal(created.status, 201);
   const id = created.body.reservation.id;
 
-  const edited = await api(`/api/staff/reservations/${id}/edit`, { body: { room: '302' } });
-  assert.equal(edited.body.reservation.room, '302');
+  const edited = await api(`/api/staff/reservations/${id}/edit`, { body: { room: 'Deluxe' } });
+  assert.equal(edited.body.reservation.room, 'Deluxe');
+  assert.deepEqual(edited.body.reservation.rooms, ['Deluxe'], 'one fact, both fields');
 
   const link = await api(`/api/staff/reservations/${id}/link`, { body: {} });
   assert.match(link.body.link, /^http:\/\/127\.0\.0\.1\/g\/[A-Za-z0-9_-]+$/);
@@ -226,12 +232,26 @@ test('a forwarded notification can be fed in by hand', async () => {
   const raw = await readFile(new URL('./fixtures/quovai-new.eml', import.meta.url), 'utf8');
   const split = raw.indexOf('\n\n');
   const { status, body } = await api('/api/staff/sync/ingest', {
-    body: { subject: '🔔 Prenotazione per LunArt', from: 'QuoVai', body: raw.slice(split + 2), messageId: '<by-hand@q>' },
+    body: { subject: '🔔 Prenotazione per Bella Vigna', from: 'QuoVai', body: raw.slice(split + 2), messageId: '<by-hand@q>' },
   });
   assert.equal(status, 200);
   assert.equal(body.action, 'created');
   const saved = await db.reservations.findByBooking('quovai', '5312447891');
-  assert.equal(saved.room, '303');
+  assert.equal(saved.room, 'Deluxe');
+});
+
+test('a LunArt notification fed in by hand is refused, and nothing is filed', async () => {
+  // The hand-fed path is the one a person uses when they forward "the" QuoVai
+  // email — which, with one operator running both houses, may be LunArt's.
+  const { status, body } = await api('/api/staff/sync/ingest', {
+    body: { subject: LUNART.subject, from: 'QuoVai', body: LUNART.body, messageId: '<by-hand-lunart@q>' },
+  });
+  assert.equal(status, 422);
+  assert.equal(body.reason, 'other-property');
+  assert.equal(body.property, 'LUNART');
+  assert.equal(await db.reservations.findByBooking('quovai', '6213834462'), null, 'no stay for a LunArt guest');
+  const alerts = await db.alerts.open();
+  assert.ok(alerts.some((alert) => alert.kind === 'other-property-notification'), 'and staff are told why');
 });
 
 test('polling and reconciling say they are not configured rather than failing quietly', async () => {
@@ -254,57 +274,100 @@ test('the QuoVai webhook route exists and refuses until it is configured', async
 test('the staff app and its manifest are served', async () => {
   const page = await fetch(`${base}/staff`);
   assert.equal(page.status, 200);
-  assert.match(await page.text(), /LunArt Staff/);
+  assert.match(await page.text(), /<title>Bella Vigna Staff<\/title>/);
 
   const manifest = await fetch(`${base}/staff/manifest.webmanifest`);
   assert.equal(manifest.status, 200);
   const parsed = await manifest.json();
+  assert.equal(parsed.name, 'Bella Vigna Staff', 'the icon on a staff phone names the house');
   assert.equal(parsed.scope, '/staff');
   assert.equal(parsed.display, 'standalone');
 });
 
 /* ── What the stay includes, and what the card adds ──────────────────────── */
 
-test('the Opera Caffè benefit comes with the stay, not with the card', async () => {
-  const opera = PARTNERS.find((partner) => partner.partner_id === 'opera-caffe');
-  assert.equal(inclusionOf(opera), 'stay');
-  assert.equal(opera.applies_to, 'all-guests', 'everyone on the reservation, not two people');
-  assert.deepEqual(opera.eligibility.entitlementsAll, [],
-    'an active Pass and nothing bought');
+/**
+ * Bella Vigna runs LunArt's partner network, and not one of LunArt's agreements
+ * has been confirmed for this property yet (`PROPERTY_AGREEMENTS`). So each test
+ * here says two things: what a Bella Vigna guest is offered today, which is
+ * nothing claimable; and — with the register put as if every agreement were
+ * confirmed (`test/support/property.mjs`) — that the rules about stay and card
+ * still hold on the day one is.
+ */
 
-  assert.ok(stayPartners().some((partner) => partner.partner_id === 'opera-caffe'));
-  assert.equal(cardPartners().some((partner) => partner.partner_id === 'opera-caffe'), false,
-    'buying an upgrade must not be the way to get something that is already included');
+test('no partner benefit is claimable at Bella Vigna until its agreement is confirmed', async () => {
+  const opera = PARTNERS.find((partner) => partner.partner_id === 'opera-caffe');
+  assert.equal(opera.partnership_status, PARTNERSHIP_STATUS.activating, 'published as in attivazione');
+  assert.deepEqual(opera.benefits, [], 'with nothing to claim');
+  assert.equal(stayPartners().length, 0);
+  assert.equal(cardPartners().length, 0);
 
   const { body } = await api('/api/catalog');
-  assert.ok(body.stayBenefits.some((benefit) => benefit.partner_id === 'opera-caffe'));
-  assert.equal(body.cardBenefits.some((benefit) => benefit.partner_id === 'opera-caffe'), false);
-  assert.equal(partnerView('opera-caffe').applies_to, 'all-guests');
+  assert.deepEqual(body.stayBenefits, [], 'nothing comes with the stay yet');
+  assert.deepEqual(body.cardBenefits, [], 'and nothing comes with the card');
 });
 
-test('a card issued to a guest lists only what the card itself gets them', async () => {
-  const views = cardBenefits();
-  assert.ok(views.length >= 2, 'Le Firme and Blue Velvet');
-  assert.equal(views.some((view) => view.partner_id === 'opera-caffe'), false);
-  assert.ok(views.every((view) => view.inclusion === 'card'));
-  assert.ok(views.every((view) => view.entitlements_required.includes('privilege')));
+test('the Opera Caffè benefit comes with the stay, not with the card', async () => {
+  confirmAllAgreements();
+  try {
+    const opera = getPartner('opera-caffe');
+    assert.equal(inclusionOf(opera), 'stay');
+    assert.equal(opera.applies_to, 'all-guests', 'everyone on the reservation, not two people');
+    assert.deepEqual(opera.eligibility.entitlementsAll, [],
+      'an active Pass and nothing bought');
+
+    assert.ok(stayPartners().some((partner) => partner.partner_id === 'opera-caffe'));
+    assert.equal(cardPartners().some((partner) => partner.partner_id === 'opera-caffe'), false,
+      'buying an upgrade must not be the way to get something that is already included');
+
+    const { body } = await api('/api/catalog');
+    assert.ok(body.stayBenefits.some((benefit) => benefit.partner_id === 'opera-caffe'));
+    assert.equal(body.cardBenefits.some((benefit) => benefit.partner_id === 'opera-caffe'), false);
+    assert.equal(partnerView('opera-caffe').applies_to, 'all-guests');
+  } finally {
+    restoreAgreements();
+  }
+});
+
+test('a card issued to a guest lists only what the card itself gets them', () => {
+  assert.deepEqual(cardBenefits(), [], 'at Bella Vigna today, nothing at all');
+
+  confirmAllAgreements();
+  try {
+    const views = cardBenefits();
+    assert.ok(views.length >= 2, 'Le Firme and Blue Velvet');
+    assert.equal(views.some((view) => view.partner_id === 'opera-caffe'), false);
+    assert.ok(views.every((view) => view.inclusion === 'card'));
+    assert.ok(views.every((view) => view.entitlements_required.includes('privilege')));
+  } finally {
+    restoreAgreements();
+  }
 });
 
 test('with no card partner at all, the upgrade is not sold', () => {
   const card = PRODUCTS.find((product) => product.id === 'privilege-card');
-  // The rail reads the register. Take the card partners away and it refuses again.
-  applyPartners(PARTNERS.filter((partner) => partner.partner_id === 'opera-caffe'));
+  // Bella Vigna's own register is exactly that case: no card partner has an
+  // agreement here yet, so the rail refuses even where placeholder prices are allowed.
   assert.equal(cardPartners().length, 0);
   assert.equal(isPurchasable(card, { allowPlaceholders: true }), false,
     'an upgrade with nothing behind it is not a product');
 
-  applyPartners(PARTNERS);
-  assert.equal(cardPartners().length, 2);
-  assert.equal(isPurchasable(card, { allowPlaceholders: true }), true,
-    'and it comes back by itself the moment a real partner is in the register');
+  confirmAllAgreements();
+  try {
+    assert.equal(cardPartners().length, 2);
+    assert.equal(isPurchasable(card, { allowPlaceholders: true }), true,
+      'and it comes back by itself the moment a real partner is in the register');
+
+    // Take the card partners away again and it refuses again.
+    applyPartners(NETWORK.filter((partner) => partner.partner_id === 'opera-caffe'));
+    assert.equal(cardPartners().length, 0);
+    assert.equal(isPurchasable(card, { allowPlaceholders: true }), false);
+  } finally {
+    restoreAgreements();
+  }
 });
 
-test('LunArt Privilege is on sale on a server with no development settings at all', async () => {
+test(`${brand.privilegeName} is withheld on a plain server, and on sale there once its terms are confirmed`, async () => {
   const plain = await createApp({
     store: createStore(),
     stripe: createMockStripe(),
@@ -317,16 +380,36 @@ test('LunArt Privilege is on sale on a server with no development settings at al
   await new Promise((resolve) => plainServer.once('listening', resolve));
   try {
     const port = plainServer.address().port;
-    const catalog = await (await fetch(`http://127.0.0.1:${port}/api/catalog`)).json();
-    const card = catalog.products.find((product) => product.id === 'privilege-card');
-    assert.equal(card.purchasable, true,
-      'no placeholder prices, no dev partners: the real product, really buyable');
-    assert.equal(catalog.allowPlaceholderPrices, false, 'and nothing else was relaxed to get there');
+    const read = async (path) => (await fetch(`http://127.0.0.1:${port}${path}`)).json();
+    const cardIn = (catalog) => catalog.products.find((product) => product.id === 'privilege-card');
 
-    const health = await (await fetch(`http://127.0.0.1:${port}/api/health`)).json();
+    // Today: no venue has confirmed a benefit for Bella Vigna, and the price is
+    // LunArt's, carried over as a placeholder. Not a product.
+    const today = await read('/api/catalog');
+    assert.equal(cardIn(today).purchasable, false, 'nothing behind it, and no price agreed');
+    assert.equal(today.allowPlaceholderPrices, false);
+    const healthToday = await read('/api/health');
+    assert.equal(healthToday.cardPartners, 0);
+    assert.equal(healthToday.cardOnSale, false);
+
+    // A partner alone is not enough: a plain server sells nothing at a placeholder price.
+    confirmAllAgreements();
+    assert.equal(cardIn(await read('/api/catalog')).purchasable, false, 'the price has to be confirmed too');
+
+    // Both confirmed, through the same seams the server uses at boot, and nothing
+    // about the server itself changed.
+    confirmAllPrices(DEV_PRICES);
+    const confirmed = await read('/api/catalog');
+    assert.equal(cardIn(confirmed).purchasable, true,
+      'no placeholder prices, no dev partners: the real product, really buyable');
+    assert.equal(confirmed.allowPlaceholderPrices, false, 'and nothing else was relaxed to get there');
+
+    const health = await read('/api/health');
     assert.equal(health.cardPartners, 2);
     assert.equal(health.cardOnSale, true);
   } finally {
+    restoreAgreements();
+    applyPriceOverrides(DEV_PRICES);
     plainServer.close();
   }
 });
@@ -386,18 +469,25 @@ test('no wash service is promised, and the terms say so', () => {
 /* ── Rooms and language ──────────────────────────────────────────────────── */
 
 test('the rooms are the current mapping, and the future is not published', () => {
+  // What a screen prints after "Camera" is the id the store keeps, for each room.
   assert.deepEqual(
-    rooms.map((room) => [room.number, room.category.it]),
-    [['301', 'Standard'], ['302', 'Queen'], ['303', 'Superior'], ['304', 'Queen'], ['305', 'Superior']],
+    rooms.map((room) => [room.id, room.number]),
+    [['Standard', 'Standard'], ['Deluxe', 'Deluxe'], ['Terrazza', 'Terrazza']],
   );
-  assert.equal(rooms.some((room) => room.number === '306'), false, 'the sixth room is not published');
-  assert.equal(plannedRooms[0].number, '306');
-  assert.equal(plannedRooms[0].category, null, 'and its category is not claimed');
+  // What the guide shows and what a booking can name are the same three rooms, so
+  // a notification can never file a guest in a room the guide has no page for.
+  assert.deepEqual(rooms.map((room) => room.id), ROOM_IDS);
+  assert.deepEqual(roomRegistry.map((room) => room.id), ROOM_IDS);
+  assert.deepEqual(plannedRooms, [], 'nothing is announced as coming');
 
-  // The triples, as they actually are.
-  assert.match(rooms.find((room) => room.number === '303').summary.it, /tripla/);
-  assert.match(rooms.find((room) => room.number === '305').summary.it, /tripla/);
-  assert.match(rooms.find((room) => room.number === '304').summary.it, /non è una tripla standard/);
+  // The QuoVai mapping and the capacities are not confirmed, and every room says so.
+  for (const room of rooms) assert.equal(room.verify?.level, 'blocker', room.id);
+
+  // The triple, as it actually is: the terrace room, and only that one.
+  assert.deepEqual(rooms.filter((room) => /tripla/i.test(room.category.it)).map((room) => room.id), ['Terrazza']);
+  // And a detail the Property Pack and the photograph disagree on is not claimed.
+  const terrace = rooms.find((room) => room.id === 'Terrazza');
+  assert.equal(/turchese|turquoise/i.test(JSON.stringify(terrace.summary)), false, 'the bathroom colour waits');
 });
 
 test('every interface string exists in both languages', () => {
@@ -472,7 +562,7 @@ test('preview mode refuses to read a credential, however it got there', async ()
     GMAIL_CLIENT_ID: 'id', GMAIL_CLIENT_SECRET: 'secret', GMAIL_REFRESH_TOKEN: 'token',
     VAPID_PUBLIC_KEY: 'pub', VAPID_PRIVATE_KEY: 'priv', VAPID_SUBJECT: 'mailto:x@y.z',
     GOOGLE_CALENDAR_ID: 'cal', GOOGLE_SERVICE_ACCOUNT_EMAIL: 'sa@x', GOOGLE_SERVICE_ACCOUNT_KEY: 'key',
-    QUOVAI_ICAL_FEEDS: '303:https://feed.example/303.ics',
+    QUOVAI_ICAL_FEEDS: 'Deluxe:https://feed.example/deluxe.ics',
     QUOVAI_WEBHOOK_SECRET: 'shhh',
   }, ({ config }) => {
     assert.equal(config.preview, true);
@@ -517,9 +607,9 @@ test('a preview says so, and says it loudly if the Staff app is left open', asyn
 });
 
 test('the host tells the preview its own address', async () => {
-  await withEnv({ GUIDE_PREVIEW: '1', PUBLIC_URL: '', RENDER_EXTERNAL_URL: 'https://lunart-preview.onrender.com/' },
+  await withEnv({ GUIDE_PREVIEW: '1', PUBLIC_URL: '', RENDER_EXTERNAL_URL: 'https://bella-vigna-preview.onrender.com/' },
     ({ config }) => {
-      assert.equal(config.publicUrl, 'https://lunart-preview.onrender.com', 'trailing slash trimmed');
+      assert.equal(config.publicUrl, 'https://bella-vigna-preview.onrender.com', 'trailing slash trimmed');
     });
 
   await withEnv({ PUBLIC_URL: 'https://chosen.example', RENDER_EXTERNAL_URL: 'https://ignored.example' },
@@ -528,7 +618,7 @@ test('the host tells the preview its own address', async () => {
     });
 });
 
-test('the preview front door lists the demo links, and only exists in a preview', async () => {
+test('the preview front door lists the demo links, and only exists in a preview', async (t) => {
   const quiet = await fetch(`${base}/preview`);
   assert.equal(quiet.status, 404, 'an ordinary server has no such page');
 
@@ -541,18 +631,31 @@ test('the preview front door lists the demo links, and only exists in a preview'
     allowPlaceholderPrices: true,
     staffToken: 'preview-token',
     mode: 'development',
-    publicUrl: 'https://lunart-preview.onrender.com',
+    publicUrl: 'https://bella-vigna-preview.onrender.com',
   });
   const listener = previewApp.listen(0);
   await new Promise((resolve) => listener.once('listening', resolve));
+  t.after(() => listener.close());
   const previewBase = `http://127.0.0.1:${listener.address().port}`;
 
   const page = await (await fetch(`${previewBase}/preview`)).text();
   assert.match(page, /ANTEPRIMA|Anteprima/);
+  assert.match(page, /<title>Bella Vigna — Anteprima<\/title>/);
   assert.match(page, /\/g\/[A-Za-z0-9_-]{20,}/, 'a personal link is listed');
   assert.match(page, /\/staff/);
-  assert.match(page, /\/partner\/opera-caffe/);
   assert.match(page, /nessun pagamento reale|Nessuna carta/i, 'and what is switched off');
+
+  // A venue's scanner is listed only for an agreement confirmed for this house.
+  // None is yet, so the preview says that rather than showing LunArt's.
+  assert.equal(/\/partner\/opera-caffe/.test(page), false, 'no scanner for a benefit nobody can claim');
+  assert.match(page, /Nessun partner ha ancora un accordo confermato per Bella Vigna/);
+  confirmAllAgreements();
+  try {
+    const confirmed = await (await fetch(`${previewBase}/preview`)).text();
+    assert.match(confirmed, /\/partner\/opera-caffe/, 'and the day one is, its scanner is on the front door');
+  } finally {
+    restoreAgreements();
+  }
 
   // Every page a guest, a member of staff or a venue opens carries the flag.
   for (const path of ['/', '/staff', '/recover', '/validate-card', '/partner/opera-caffe']) {
@@ -580,8 +683,6 @@ test('the preview front door lists the demo links, and only exists in a preview'
   assert.equal((await fetch(`${previewBase}/api/staff/dashboard`, {
     headers: { authorization: 'Bearer preview-token' },
   })).status, 200);
-
-  listener.close();
 });
 
 test('nothing but a preview ever carries the flag', async () => {
@@ -625,7 +726,6 @@ test('the repair endpoint is behind the staff token', async () => {
 });
 
 test('the repair corrects the live rows through the API, and only those', async () => {
-  const { REAL_RESERVATIONS } = await import('./fixtures/quovai.js');
   const db = createStore();
 
   // The staging store as the old parser left it: dates and links, no names, no rooms.
@@ -662,7 +762,7 @@ test('the repair corrects the live rows through the API, and only those', async 
   assert.equal(rows.length, 2, 'repair created nothing');
   assert.deepEqual(
     rows.map((r) => `${r.first_name} ${r.last_name} · ${r.room}`).sort(),
-    ['Irene Cappellini · 302', 'Martin Markert · 304'],
+    ['Irene Cappellini · Standard', 'Martin Markert · Terrazza'],
   );
   assert.equal((await db.deliveries.list()).length, 0, 'and scheduled no email');
 

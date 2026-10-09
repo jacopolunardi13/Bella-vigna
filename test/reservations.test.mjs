@@ -35,7 +35,7 @@ const event = (over = {}) => ({
   check_out: '2026-10-15',
   adults: 2,
   children: 0,
-  room: '303',
+  room: 'Deluxe',
   message_id: '<one@quovai>',
   ...over,
 });
@@ -56,7 +56,7 @@ test('a reservation is built with everything the rest of the system needs', () =
 test('a guide token carries nothing about the guest', () => {
   const reservation = buildReservation(event());
   const token = reservation.guide_token.toLowerCase();
-  for (const secret of ['marta', 'venturi', '303', '5312447891', '2026', 'booking', 'guest']) {
+  for (const secret of ['marta', 'venturi', 'deluxe', '5312447891', '2026', 'booking', 'guest']) {
     assert.equal(token.includes(secret), false, `${secret} must not be in the token`);
   }
   assert.match(reservation.guide_token, /^[A-Za-z0-9_-]+$/, 'url-safe and opaque');
@@ -99,14 +99,14 @@ test('a modification updates the same reservation rather than making another', a
   await ingestEvent({ store: db, event: event() });
   const changed = await ingestEvent({
     store: db,
-    event: event({ kind: 'modified', check_out: '2026-10-17', adults: 3, room: '305', message_id: '<two@quovai>' }),
+    event: event({ kind: 'modified', check_out: '2026-10-17', adults: 3, room: 'Terrazza', message_id: '<two@quovai>' }),
   });
 
   assert.equal(changed.action, 'modified');
   assert.equal(changed.reservation.status, RESERVATION_STATUS.modified);
   assert.equal(changed.reservation.check_out, '2026-10-17');
-  assert.equal(changed.reservation.room, '305');
-  assert.deepEqual(changed.reservation.rooms, ['305']);
+  assert.equal(changed.reservation.room, 'Terrazza');
+  assert.deepEqual(changed.reservation.rooms, ['Terrazza']);
   // `room` and `rooms` are one fact, so a change to the room reports both.
   assert.deepEqual(Object.keys(changed.changed).sort(), ['adults', 'check_out', 'guest_count', 'room', 'rooms']);
   assert.equal((await db.reservations.list({})).length, 1);
@@ -120,6 +120,24 @@ test('a modification that changes nothing is recognised as such', async () => {
   const db = store();
   await ingestEvent({ store: db, event: event() });
   const again = await ingestEvent({ store: db, event: event({ kind: 'modified', message_id: '<three@quovai>' }) });
+  assert.equal(again.action, 'unchanged');
+});
+
+/**
+ * Here a room has more than one name — "Deluxe", "Camera Deluxe", "doccia doppia"
+ * — and a channel may use any of them. The record keeps the id, so the same room
+ * spelled another way is the same room, not a modification that reschedules the
+ * guest's email.
+ */
+test('the same room in another of its spellings is not a change', async () => {
+  const db = store();
+  const first = await ingestEvent({ store: db, event: event({ room: 'camera deluxe' }) });
+  assert.equal(first.reservation.room, 'Deluxe', 'kept as the id');
+  assert.deepEqual(first.reservation.rooms, ['Deluxe']);
+
+  const again = await ingestEvent({
+    store: db, event: event({ kind: 'modified', room: 'Camera con doccia doppia', message_id: '<spelled@quovai>' }),
+  });
   assert.equal(again.action, 'unchanged');
 });
 
@@ -149,7 +167,7 @@ test('a reinstated booking comes back to life rather than being duplicated', asy
   const db = store();
   await ingestEvent({ store: db, event: event() });
   await ingestEvent({ store: db, event: event({ kind: 'cancelled', message_id: '<c@quovai>' }) });
-  const back = await ingestEvent({ store: db, event: event({ kind: 'new', message_id: '<r@quovai>', room: '304' }) });
+  const back = await ingestEvent({ store: db, event: event({ kind: 'new', message_id: '<r@quovai>', room: 'Standard' }) });
   assert.equal(back.action, 'reinstated');
   assert.equal(back.reservation.status, RESERVATION_STATUS.active);
   assert.equal(back.reservation.cancelled_at, null);
@@ -183,7 +201,7 @@ test('a personal link gives the guide a first name, a room and the dates — and
   const view = guideContextView(resolved);
 
   assert.equal(view.first_name, 'Marta');
-  assert.equal(view.room, '303');
+  assert.equal(view.room, 'Deluxe');
   assert.equal(view.check_in, '2026-10-12');
   assert.equal(view.nights, 3);
   assert.equal(view.can_purchase, true);

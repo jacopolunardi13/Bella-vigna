@@ -5,6 +5,11 @@
  * an HTML table, Italian dates, Italian money, an OTA relay address — because the
  * failure that matters is not a crash. It is a notification that parses into a
  * plausible-looking reservation with the wrong dates in it.
+ *
+ * At Bella Vigna there is a second way to be plausible and wrong: a notification
+ * that reads perfectly and belongs to LunArt. The two houses share an operator,
+ * and the same QuoVai template names the property on every message, so the last
+ * section here is about whose notification it is.
  */
 
 import test from 'node:test';
@@ -59,10 +64,10 @@ test('a QuoVai notification is recognised, and other mail is not', async () => {
 });
 
 test('the kind comes from the body, and from the subject when it has to', () => {
-  assert.equal(kindOf({ subject: '🔔 Prenotazione per LunArt', body: 'NEW' }), 'new');
-  assert.equal(kindOf({ subject: '🔄 Modifica per LunArt', body: 'MODIFIED' }), 'modified');
-  assert.equal(kindOf({ subject: '⛔ Cancellazione per LunArt', body: 'CANCELLED' }), 'cancelled');
-  assert.equal(kindOf({ subject: '🔔 Prenotazione per LunArt', body: 'nessuna parola chiave' }), 'new');
+  assert.equal(kindOf({ subject: '🔔 Prenotazione per Bella Vigna', body: 'NEW' }), 'new');
+  assert.equal(kindOf({ subject: '🔄 Modifica per Bella Vigna', body: 'MODIFIED' }), 'modified');
+  assert.equal(kindOf({ subject: '⛔ Cancellazione per Bella Vigna', body: 'CANCELLED' }), 'cancelled');
+  assert.equal(kindOf({ subject: '🔔 Prenotazione per Bella Vigna', body: 'nessuna parola chiave' }), 'new');
   assert.equal(kindOf({ subject: 'Qualcosa', body: 'Qualcosa' }), null);
 });
 
@@ -84,10 +89,14 @@ test('a NEW notification becomes a complete reservation event', async () => {
   assert.equal(event.check_out, '2026-10-15');
   assert.equal(event.adults, 2);
   assert.equal(event.children, 0);
-  assert.equal(event.room, '303');
+  assert.equal(event.room, 'Deluxe');
+  // The rate on the same line says "standard", and the property has a room called
+  // Standard. A rate is not a room: only the token that leads the row is.
+  assert.deepEqual(event.rooms, ['Deluxe'], 'one room, not Deluxe and Standard');
   assert.equal(event.rate, 'standard non rimborsabile');
   assert.equal(event.total_amount, 48600);
   assert.equal(event.booked_at, '2026-09-28');
+  assert.equal(event.property, 'Bella Vigna');
   assert.deepEqual(parsed.warnings, []);
 });
 
@@ -104,7 +113,8 @@ test('a notification laid out as a table, with named dates, parses the same way'
   assert.equal(event.check_in, '2026-11-05', '5 novembre 2026');
   assert.equal(event.check_out, '2026-11-07');
   assert.equal(event.total_amount, 124050, '1.240,50 € is Italian, not American');
-  assert.equal(event.room, '302');
+  assert.equal(event.room, 'Standard', '"Classica" is the Property Pack’s other name for it, and the id is what is kept');
+  assert.equal(event.property, 'Bella Vigna Firenze', 'the long name is this property too');
   assert.equal(event.children, 1);
   assert.equal(event.guest_count, 3);
 });
@@ -118,7 +128,7 @@ test('a MODIFIED notification in HTML parses, entities and all', async () => {
   assert.equal(event.booking_reference, '5312447891', 'the same booking');
   assert.equal(event.check_out, '2026-10-17', 'the dates moved');
   assert.equal(event.adults, 3);
-  assert.equal(event.room, '305');
+  assert.equal(event.room, 'Terrazza', 'and the room moved, from Deluxe to the terrace');
   assert.equal(event.total_amount, 81000, '810,00 &euro; decoded');
   assert.equal(event.source_updated_at, '2026-10-02');
 });
@@ -136,14 +146,14 @@ test('a CANCELLED notification parses without a full set of fields', async () =>
 /* ── Refusing rather than guessing ───────────────────────────────────────── */
 
 test('a notification without a booking number is refused', () => {
-  const result = parseQuovaiEmail({ subject: '🔔 Prenotazione per LunArt', body: 'NEW\nStruttura: LunArt' });
+  const result = parseQuovaiEmail({ subject: '🔔 Prenotazione per Bella Vigna', body: 'NEW\nStruttura: Bella Vigna' });
   assert.equal(result.ok, false);
   assert.equal(result.reason, 'no-booking-reference');
 });
 
 test('a notification with unreadable dates is refused rather than filled in', () => {
   const result = parseQuovaiEmail({
-    subject: '🔔 Prenotazione per LunArt',
+    subject: '🔔 Prenotazione per Bella Vigna',
     body: 'NEW\nNumero prenotazione: 123456\nCheck-in: prossimamente\nCheck-out: ?',
   });
   assert.equal(result.ok, false);
@@ -152,7 +162,7 @@ test('a notification with unreadable dates is refused rather than filled in', ()
 
 test('a checkout before the check-in is refused', () => {
   const result = parseQuovaiEmail({
-    subject: '🔔 Prenotazione per LunArt',
+    subject: '🔔 Prenotazione per Bella Vigna',
     body: 'NEW\nNumero prenotazione: 123456\nCheck-in: 12/10/2026\nCheck-out: 03/10/2026',
   });
   assert.equal(result.ok, false);
@@ -163,7 +173,7 @@ test('an unreadable notification becomes something staff have to look at', async
   const db = store();
   const result = await ingestMessage({
     store: db,
-    message: { subject: '🔔 Prenotazione per LunArt', body: 'NEW\nqualcosa è andato storto', messageId: '<broken@q>' },
+    message: { subject: '🔔 Prenotazione per Bella Vigna', body: 'NEW\nqualcosa è andato storto', messageId: '<broken@q>' },
   });
   assert.equal(result.ok, false);
   const alerts = await db.alerts.open();
@@ -194,7 +204,7 @@ test('Italian money is read as Italian', () => {
 });
 
 test('a label is not matched inside another label', () => {
-  const body = flatten('Agenzia/Canale: Booking.com\nCamera 303 - Superior | Tariffa: non rimborsabile');
+  const body = flatten('Agenzia/Canale: Booking.com\nCamera Deluxe - Matrimoniale | Tariffa: non rimborsabile');
   assert.equal(fieldOf(body, ['agenzia/canale', 'agenzia']), 'Booking.com');
   assert.equal(fieldOf(body, ['tariffa']), 'non rimborsabile');
 });
@@ -283,6 +293,11 @@ test('every reservation source says whether it can actually be used', () => {
 
 /* ── iCal reconciliation ─────────────────────────────────────────────────── */
 
+/**
+ * A feed naming its rooms the way a person would. Which spelling QuoVai's real
+ * feed uses for Bella Vigna is not known yet, so the room is found by the same
+ * registry the notification parser reads (`commerce/rooms.js`), whatever it is.
+ */
 const ICAL = `BEGIN:VCALENDAR
 VERSION:2.0
 PRODID:-//QuoVai//EN
@@ -290,13 +305,13 @@ BEGIN:VEVENT
 UID:qv-5312447891@quovai
 DTSTART;VALUE=DATE:20261012
 DTEND;VALUE=DATE:20261015
-SUMMARY:Prenotazione 5312447891 - camera 303
+SUMMARY:Prenotazione 5312447891 - camera Deluxe
 END:VEVENT
 BEGIN:VEVENT
 UID:qv-unknown@quovai
 DTSTART;VALUE=DATE:20261020
 DTEND;VALUE=DATE:20261022
-SUMMARY:Camera 305 occupata
+SUMMARY:Camera Terrazza occupata
 DESCRIPTION:Nessun dato ospite
 END:VEVENT
 BEGIN:VEVENT
@@ -316,7 +331,8 @@ test('an iCal feed parses into occupancy, with the end date read correctly', () 
   assert.equal(first.check_out, '2026-10-15');
   assert.equal(first.last_night, '2026-10-14', 'DTEND is the morning the room is free');
   assert.equal(first.booking_reference, '5312447891');
-  assert.equal(first.room, '303');
+  assert.equal(first.room, 'Deluxe', '"camera Deluxe" in a summary is the room id, whatever its case');
+  assert.equal(events[1].room, 'Terrazza');
   assert.equal(events[2].blocked, true, 'a block is not a guest');
 });
 
@@ -327,32 +343,32 @@ UID:a@b
 DTSTART;VALUE=DATE:20261012
 DTEND;VALUE=DATE:20261013
 SUMMARY:Prenotazione 998877
- 6655 - camera 301
+ 6655 - camera Standard
 END:VEVENT
 END:VCALENDAR`;
   const [event] = parseIcal(folded);
-  assert.equal(event.room, '301');
+  assert.equal(event.room, 'Standard');
   assert.match(event.summary, /9988776655/);
 });
 
 test('an occupancy with no reservation behind it is the alert that matters', () => {
   const reservations = [buildReservation({
     source: 'quovai', booking_reference: '5312447891',
-    check_in: '2026-10-12', check_out: '2026-10-15', room: '303',
+    check_in: '2026-10-12', check_out: '2026-10-15', room: 'Deluxe',
   })];
   const result = reconcile({ events: parseIcal(ICAL), reservations, now: new Date('2026-10-01T10:00:00Z') });
 
   assert.equal(result.matched.length, 1);
   assert.equal(result.unmatched.length, 1);
   assert.equal(result.unmatched[0].uid, 'qv-unknown@quovai');
-  assert.equal(result.unmatched[0].room, '305');
+  assert.equal(result.unmatched[0].room, 'Terrazza');
   assert.equal(result.missing.length, 0);
 });
 
 test('a reservation the feed does not show is flagged, not deleted', () => {
   const reservations = [buildReservation({
     source: 'quovai', booking_reference: 'NOT-IN-FEED',
-    check_in: '2026-10-12', check_out: '2026-10-15', room: '301',
+    check_in: '2026-10-12', check_out: '2026-10-15', room: 'Standard',
   })];
   const result = reconcile({ events: [], reservations, now: new Date('2026-10-01T10:00:00Z') });
   assert.equal(result.missing.length, 1);
@@ -362,7 +378,7 @@ test('a reservation the feed does not show is flagged, not deleted', () => {
 test('a reservation typed in by staff is not expected to be in an OTA feed', () => {
   const reservations = [buildReservation({
     source: 'manual', booking_reference: 'MAN-1',
-    check_in: '2026-10-12', check_out: '2026-10-15', room: '301',
+    check_in: '2026-10-12', check_out: '2026-10-15', room: 'Standard',
   })];
   const result = reconcile({ events: [], reservations, now: new Date('2026-10-01T10:00:00Z') });
   assert.equal(result.missing.length, 0);
@@ -374,12 +390,12 @@ BEGIN:VEVENT
 UID:no-ref@quovai
 DTSTART;VALUE=DATE:20261012
 DTEND;VALUE=DATE:20261015
-SUMMARY:Camera 303
+SUMMARY:Camera Deluxe
 END:VEVENT
 END:VCALENDAR`;
   const reservations = [buildReservation({
     source: 'quovai', booking_reference: 'WHATEVER',
-    check_in: '2026-10-12', check_out: '2026-10-15', room: '303',
+    check_in: '2026-10-12', check_out: '2026-10-15', room: 'Deluxe',
   })];
   const result = reconcile({ events: parseIcal(feed), reservations, now: new Date('2026-10-01T10:00:00Z') });
   assert.equal(result.matched.length, 1);
@@ -388,12 +404,12 @@ END:VCALENDAR`;
 
 test('reconciling a feed is idempotent: the second run holds no second stay', async () => {
   const db = store();
-  const feeds = [{ room: '303', url: 'https://feed.example/303.ics' }];
+  const feeds = [{ room: 'Deluxe', url: 'https://feed.example/deluxe.ics' }];
   const fetchText = async () => ICAL;
 
   const first = await reconcileFeeds({ store: db, feeds, fetchText, now: new Date('2026-10-01T10:00:00Z') });
   assert.equal(first.ok, true);
-  assert.equal(first.unmatched, 2, 'both the 303 booking and the 305 occupancy are unaccounted for');
+  assert.equal(first.unmatched, 2, 'both the Deluxe booking and the terrace occupancy are unaccounted for');
   assert.equal(first.created, 2, 'each one becomes a provisional reservation');
 
   const before = (await db.alerts.open()).length;
@@ -410,7 +426,7 @@ test('a calendar entry nobody has emailed about becomes a provisional stay, not 
   const db = store();
   const result = await reconcileFeeds({
     store: db,
-    feeds: [{ room: '305', url: 'https://feed.example/305.ics' }],
+    feeds: [{ room: 'Terrazza', url: 'https://feed.example/terrazza.ics' }],
     fetchText: async () => ICAL,
     now: new Date('2026-10-01T10:00:00Z'),
   });
@@ -422,7 +438,7 @@ test('a calendar entry nobody has emailed about becomes a provisional stay, not 
   assert.equal(held.source, 'ical');
   assert.equal(held.check_in, '2026-10-20');
   assert.equal(held.check_out, '2026-10-22');
-  assert.equal(held.room, '305');
+  assert.equal(held.room, 'Terrazza');
 
   // Nothing invented. Every one of these is something only a guest can tell us.
   assert.equal(held.first_name, '');
@@ -439,7 +455,7 @@ test('a provisional stay never schedules a guest email', async () => {
   const db = store();
   await reconcileFeeds({
     store: db,
-    feeds: [{ room: '305', url: 'https://feed.example/305.ics' }],
+    feeds: [{ room: 'Terrazza', url: 'https://feed.example/terrazza.ics' }],
     fetchText: async () => ICAL,
     now: new Date('2026-10-01T10:00:00Z'),
   });
@@ -457,7 +473,7 @@ test('the QuoVai notification fills the calendar’s stay in rather than filing 
   const db = store();
   await reconcileFeeds({
     store: db,
-    feeds: [{ room: '303', url: 'https://feed.example/303.ics' }],
+    feeds: [{ room: 'Deluxe', url: 'https://feed.example/deluxe.ics' }],
     fetchText: async () => ICAL,
     now: new Date('2026-10-01T10:00:00Z'),
   });
@@ -478,7 +494,7 @@ test('the QuoVai notification fills the calendar’s stay in rather than filing 
       guest_email: 'marta@example.com',
       check_in: '2026-10-12',
       check_out: '2026-10-15',
-      room: '303',
+      room: 'Deluxe',
       channel: 'Booking.com',
     },
     now: new Date('2026-10-02T10:00:00Z'),
@@ -515,11 +531,11 @@ BEGIN:VEVENT
 UID:bare@quovai
 DTSTART;VALUE=DATE:20261112
 DTEND;VALUE=DATE:20261115
-SUMMARY:Camera 304
+SUMMARY:Camera Standard
 END:VEVENT
 END:VCALENDAR`;
   await reconcileFeeds({
-    store: db, feeds: [{ room: '304', url: 'https://feed.example/304.ics' }],
+    store: db, feeds: [{ room: 'Standard', url: 'https://feed.example/standard.ics' }],
     fetchText: async () => feed, now: new Date('2026-11-01T10:00:00Z'),
   });
   const [held] = await db.reservations.list({ limit: 10 });
@@ -529,7 +545,7 @@ END:VCALENDAR`;
     event: {
       kind: 'new', source: 'quovai', booking_reference: '6703524869',
       first_name: 'Irene', last_name: 'Bianchi', guest_email: 'irene@example.com',
-      check_in: '2026-11-12', check_out: '2026-11-15', room: '304',
+      check_in: '2026-11-12', check_out: '2026-11-15', room: 'Standard',
     },
     now: new Date('2026-11-02T10:00:00Z'),
   });
@@ -546,14 +562,14 @@ test('two provisional stays that both fit are never merged into one', async () =
   for (const uid of ['dup-a@quovai', 'dup-b@quovai']) {
     await createProvisional({
       store: db,
-      occupancy: { uid, check_in: '2026-12-01', check_out: '2026-12-04', room: '302' },
+      occupancy: { uid, check_in: '2026-12-01', check_out: '2026-12-04', room: 'Deluxe' },
       now: new Date('2026-11-01T10:00:00Z'),
     });
   }
 
   const incoming = buildReservation({
     source: 'quovai', booking_reference: 'AMBIG-1',
-    check_in: '2026-12-01', check_out: '2026-12-04', room: '302',
+    check_in: '2026-12-01', check_out: '2026-12-04', room: 'Deluxe',
   });
   const found = await findProvisionalMatch({ store: db, incoming });
   assert.equal(found.match, null, 'a guess that attaches a guest to the wrong stay is worse than a new row');
@@ -564,7 +580,7 @@ test('two provisional stays that both fit are never merged into one', async () =
     store: db,
     event: {
       kind: 'new', source: 'quovai', booking_reference: 'AMBIG-1',
-      first_name: 'Anna', check_in: '2026-12-01', check_out: '2026-12-04', room: '302',
+      first_name: 'Anna', check_in: '2026-12-01', check_out: '2026-12-04', room: 'Deluxe',
     },
   });
   assert.equal(result.action, 'created');
@@ -573,7 +589,7 @@ test('two provisional stays that both fit are never merged into one', async () =
 
 test('an event vanishing from the feed is reported and never cancelled', async () => {
   const db = store();
-  const feeds = [{ room: '305', url: 'https://feed.example/305.ics' }];
+  const feeds = [{ room: 'Terrazza', url: 'https://feed.example/terrazza.ics' }];
   await reconcileFeeds({ store: db, feeds, fetchText: async () => ICAL, now: new Date('2026-10-01T10:00:00Z') });
   const held = (await db.reservations.list({ limit: 10 })).find((r) => r.ical_uid === 'qv-unknown@quovai');
 
@@ -609,7 +625,7 @@ test('an unreachable feed is an alert, not a silent failure', async () => {
   const db = store();
   const result = await reconcileFeeds({
     store: db,
-    feeds: [{ room: '303', url: 'https://feed.example/303.ics' }],
+    feeds: [{ room: 'Deluxe', url: 'https://feed.example/deluxe.ics' }],
     fetchText: async () => { throw new Error('ETIMEDOUT'); },
   });
   assert.equal(result.errors.length, 1);
@@ -624,23 +640,28 @@ test('no feeds configured is reported as such', async () => {
 });
 
 test('feeds are configured as room:url pairs, or bare urls', () => {
-  assert.deepEqual(parseFeedConfig('303:https://a.ics,305:https://b.ics'), [
-    { room: '303', url: 'https://a.ics' },
-    { room: '305', url: 'https://b.ics' },
+  // A room may be written in any spelling the registry knows, and is kept as its id.
+  assert.deepEqual(parseFeedConfig('Deluxe:https://a.ics,terrace:https://b.ics'), [
+    { room: 'Deluxe', url: 'https://a.ics' },
+    { room: 'Terrazza', url: 'https://b.ics' },
   ]);
   assert.deepEqual(parseFeedConfig('https://all.ics'), [{ room: '', url: 'https://all.ics' }]);
   assert.deepEqual(parseFeedConfig(''), []);
+  // A setting copied from LunArt names a room this property does not have.
+  assert.equal(parseFeedConfig('303:https://a.ics')[0].room, '', '303 is not a room here');
 });
 
 /* ═══════════════════════════════════════════════════════════════════════════
    The real thing.
 
    Everything above was written against a shape nobody had seen. These are the
-   notifications LunArt actually receives, and the first live Gmail ingestion
-   showed the parser getting two things wrong on both counts that matter: QuoVai
-   does not label the guest's name, and the room number is in the table's data
-   rather than beside the word "Camera". The four reservations below are the four
-   that were really in the staging store.
+   notifications QuoVai actually sends — the template LunArt receives, which the
+   first live Gmail ingestion there showed the parser getting wrong on both counts
+   that matter: QuoVai does not label the guest's name, and the room is in the
+   table's data rather than beside the word "Camera". The four reservations below
+   are the four that were really in LunArt's staging store, carried here in Bella
+   Vigna's name and rooms until a Bella Vigna notification has been seen
+   (`test/fixtures/quovai.js` says how).
    ═══════════════════════════════════════════════════════════════════════════ */
 
 /* ── A. Parsing ─────────────────────────────────────────────────────────── */
@@ -657,20 +678,21 @@ test('the guest name is read even though QuoVai never labels it', () => {
 });
 
 test('the room comes out of the table data, not from beside the word Camera', () => {
-  // "302 queen std" / "305 sup": the number leads the row and the word "Camera"
-  // is a column header several lines above it.
-  assert.equal(parseQuovaiEmail(REAL.IRENE).event.room, '302');
-  assert.equal(parseQuovaiEmail(REAL.MARTIN).event.room, '304');
-  assert.equal(parseQuovaiEmail(REAL.KELLY).event.room, '305');
-  assert.equal(parseQuovaiEmail(REAL.FLORIAN).event.room, '305');
+  // "Camera Standard" / "Doppia/Tripla con Terrazza": the room leads the row, and
+  // the word "Camera" on its own is a column header several lines above it.
+  assert.equal(parseQuovaiEmail(REAL.IRENE).event.room, 'Standard');
+  assert.equal(parseQuovaiEmail(REAL.MARTIN).event.room, 'Terrazza');
+  assert.equal(parseQuovaiEmail(REAL.KELLY).event.room, 'Deluxe');
+  // The bare id reads the same as the Property Pack's name for it.
+  assert.equal(parseQuovaiEmail(REAL.FLORIAN).event.room, 'Deluxe');
 });
 
 test('all four live reservations read exactly as the owner verified them', () => {
   const expected = [
-    { ref: '6230618454', guest: 'Martin Markert', room: '304', from: '2026-10-02', to: '2026-10-03', channel: 'BOOKING.COM', kind: 'modified' },
-    { ref: '6213834462', guest: 'Kelly Kay', room: '305', from: '2026-10-13', to: '2026-10-14', channel: 'BOOKING.COM', kind: 'new' },
-    { ref: '6703524869', guest: 'Irene Cappellini', room: '302', from: '2026-11-07', to: '2026-11-08', channel: 'BOOKING.COM', kind: 'new' },
-    { ref: '2568875469', guest: 'Florian Tinsley', room: '305', from: '2027-05-29', to: '2027-06-02', channel: 'EXPEDIA', kind: 'new' },
+    { ref: '6230618454', guest: 'Martin Markert', room: 'Terrazza', from: '2026-10-02', to: '2026-10-03', channel: 'BOOKING.COM', kind: 'modified' },
+    { ref: '6213834462', guest: 'Kelly Kay', room: 'Deluxe', from: '2026-10-13', to: '2026-10-14', channel: 'BOOKING.COM', kind: 'new' },
+    { ref: '6703524869', guest: 'Irene Cappellini', room: 'Standard', from: '2026-11-07', to: '2026-11-08', channel: 'BOOKING.COM', kind: 'new' },
+    { ref: '2568875469', guest: 'Florian Tinsley', room: 'Deluxe', from: '2027-05-29', to: '2027-06-02', channel: 'EXPEDIA', kind: 'new' },
   ];
   const got = REAL.REAL_RESERVATIONS.map((message) => {
     const { event, kind } = parseQuovaiEmail(message);
@@ -711,7 +733,7 @@ test('and it is what tells NEW from MODIFIED from CANCELLED', () => {
 test('a cancellation of a real booking still carries its name and room', () => {
   const { event } = parseQuovaiEmail(REAL.IRENE_CANCELLED);
   assert.equal(event.last_name, 'Cappellini');
-  assert.equal(event.room, '302');
+  assert.equal(event.room, 'Standard');
 });
 
 test('a multi-part surname keeps its particle', () => {
@@ -719,7 +741,7 @@ test('a multi-part surname keeps its particle', () => {
     const message = {
       subject: '🔔 QuoVai — nuova prenotazione',
       from: 'QuoVai <noreply@quovai.com>',
-      body: `Numero prenotazione: 1234567890 NEW\n\n${full}\n\nStruttura: LUNART\nCheck-in: 01/02/2027\nCheck-out: 03/02/2027`,
+      body: `Numero prenotazione: 1234567890 NEW\n\n${full}\n\nStruttura: BELLA VIGNA\nCheck-in: 01/02/2027\nCheck-out: 03/02/2027`,
     };
     const { event } = parseQuovaiEmail(message);
     return `${event.first_name}|${event.last_name}`;
@@ -735,31 +757,57 @@ test('a line that is not a name is not taken for one', () => {
   const { event } = parseQuovaiEmail({
     subject: '🔔 QuoVai — nuova prenotazione',
     from: 'QuoVai <noreply@quovai.com>',
-    body: 'Numero prenotazione: 1234567890 NEW\n\nStruttura: LUNART\nCheck-in: 01/02/2027\nCheck-out: 03/02/2027\n\nMartin Markert',
+    body: 'Numero prenotazione: 1234567890 NEW\n\nStruttura: BELLA VIGNA\nCheck-in: 01/02/2027\nCheck-out: 03/02/2027\n\nMartin Markert',
   });
   // The field block started immediately, so there was no unlabelled name to take —
   // and a name sitting below the block is not where QuoVai puts it.
   assert.equal(event.last_name, '');
 });
 
-/** A number in prose is not a room. */
-test('a room number mentioned in a note is not read as the room', () => {
-  const { event } = parseQuovaiEmail({
-    subject: '🔔 QuoVai — nuova prenotazione',
-    from: 'QuoVai <noreply@quovai.com>',
-    body: [
-      'Numero prenotazione: 1234567890 NEW',
-      '',
-      'Anna Bianchi',
-      '',
-      'Struttura: LUNART',
-      'Check-in: 01/02/2027',
-      'Check-out: 03/02/2027',
-      'Note: se possibile vorremmo la 305, grazie',
-    ].join('\n'),
-  });
+/**
+ * A room in prose is not a room.
+ *
+ * At LunArt the danger was a number; here the rooms are words a guest uses in a
+ * sentence, which makes the notes the likeliest place for one to turn up.
+ */
+const withNote = (...noteLines) => parseQuovaiEmail({
+  subject: '🔔 QuoVai — nuova prenotazione',
+  from: 'QuoVai <noreply@quovai.com>',
+  body: [
+    'Numero prenotazione: 1234567890 NEW',
+    '',
+    'Anna Bianchi',
+    '',
+    'Struttura: BELLA VIGNA',
+    'Check-in: 01/02/2027',
+    'Check-out: 03/02/2027',
+    ...noteLines,
+  ].join('\n'),
+}).event;
+
+test('a room mentioned in a note is not read as the room', () => {
+  const inline = withNote('Note: se possibile vorremmo la Terrazza, grazie');
+  assert.equal(inline.room, '', 'a request is not an assignment');
+  assert.match(inline.notes, /Terrazza/, 'and the request itself is kept');
+
+  // A note on its own line that opens with a room is shaped exactly like a table
+  // row. It is still the guest's sentence, and only the notes rule keeps it out.
+  const leading = withNote('Note', 'Deluxe se fosse libera, è il nostro anniversario');
+  assert.equal(leading.room, '');
+  assert.deepEqual(leading.rooms, []);
+  assert.match(leading.notes, /^Deluxe se fosse libera/);
+});
+
+/**
+ * A note written on the label's own line is prose too. The last-resort reader
+ * takes any line mentioning "camera" and reads the rooms in it, and it used to
+ * skip a note only when the note sat on a line by itself — so "vorremmo la camera
+ * con terrazza", the most natural thing a Bella Vigna guest could write, filed
+ * them on the terrace. `roomsFromTable` now skips any line that carries the note.
+ */
+test('a room named in a note, in the registry’s own words, is not the room', () => {
+  const event = withNote('Note: se possibile vorremmo la camera con terrazza, grazie');
   assert.equal(event.room, '', 'a request is not an assignment');
-  assert.match(event.notes, /305/, 'and the request itself is kept');
 });
 
 /* ── B. Classification ──────────────────────────────────────────────────── */
@@ -788,6 +836,26 @@ test('a completed online check-in is not a reservation either', async () => {
   const store = createStore();
   await ingestMessages({ store, messages: [REAL.ONLINE_CHECKIN] });
   assert.equal((await store.alerts.open()).length, 0);
+});
+
+/**
+ * Sender alone decides nothing, so a forwarded notice is recognised by the words
+ * QuoVai puts in its subject — and those words are this property's name, not
+ * LunArt's. A LunArt subject from an unknown sender is not this mailbox's business.
+ */
+test('the subject words that mark the reservation mailbox are Bella Vigna’s', () => {
+  const forwarded = (subject) => classifyQuovaiMessage({
+    subject, from: 'diego@example.com', body: 'Il check-in online è stato completato.',
+  });
+
+  const ours = forwarded('Bella Vigna: check-in online effettuato per prenotazione 1308918 (Pelicic)');
+  assert.equal(ours.relevant, false);
+  assert.equal(ours.reason, 'operational-notice', 'ours, and operational');
+  assert.equal(ours.notice, 'online-check-in');
+
+  const theirs = forwarded('LunArt: check-in online effettuato per prenotazione 1308918 (Pelicic)');
+  assert.equal(theirs.relevant, false);
+  assert.equal(theirs.reason, 'not-from-the-reservation-mailbox', 'not ours at all');
 });
 
 test('a genuine notification that will not read still reaches staff', async () => {
@@ -861,10 +929,10 @@ test('repair fills in the name and the room the old parser lost', async () => {
 
   const rows = await store.reservations.list();
   const byName = Object.fromEntries(rows.map((r) => [`${r.first_name} ${r.last_name}`.trim(), r]));
-  assert.equal(byName['Martin Markert'].room, '304');
-  assert.equal(byName['Kelly Kay'].room, '305');
-  assert.equal(byName['Irene Cappellini'].room, '302');
-  assert.equal(byName['Florian Tinsley'].room, '305');
+  assert.equal(byName['Martin Markert'].room, 'Terrazza');
+  assert.equal(byName['Kelly Kay'].room, 'Deluxe');
+  assert.equal(byName['Irene Cappellini'].room, 'Standard');
+  assert.equal(byName['Florian Tinsley'].room, 'Deluxe');
   // And the booking numbers are numbers a guest could read back.
   for (const row of rows) assert.match(row.booking_reference, /^\d{10}$/);
 });
@@ -936,7 +1004,7 @@ test('repair leaves the history, and says in it what it did', async () => {
   const row = (await store.reservations.list()).find((r) => r.last_name === 'Cappellini');
   const repair = row.history.filter((h) => h.type === 'parser-repair');
   assert.equal(repair.length, 1);
-  assert.match(repair[0].detail, /room: 302/);
+  assert.match(repair[0].detail, /room: Standard/);
   assert.match(repair[0].detail, /last_name: Cappellini/);
 });
 
@@ -983,4 +1051,135 @@ test('an empty value never overwrites something we already hold', async () => {
   await repairFromMailbox({ store, mailbox: createMemoryMailbox([REAL.KELLY]) });
   const after = (await store.reservations.list()).find((r) => r.id === withEmail.id);
   assert.equal(after.guest_email, 'kelly@example.invalid');
+});
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Whose notification it is.
+
+   Bella Vigna and LunArt run the same core for the same operator, and QuoVai
+   sends both of them the same template. A LunArt notification in this mailbox —
+   a forwarding rule, a shared inbox, a query that matches too much — would parse
+   perfectly, and a LunArt guest would be sent a Bella Vigna link, Pass and email.
+   QuoVai names the property on every message ("Struttura: …"), so that line
+   decides: another property's name stops the parse before a guest field is read.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* ── D. Another property ────────────────────────────────────────────────── */
+
+test('a LunArt notification is refused before a single guest field is read', () => {
+  const parsed = parseQuovaiEmail(REAL.LUNART);
+  assert.equal(parsed.ok, false);
+  assert.equal(parsed.reason, 'other-property');
+  assert.equal(parsed.property, 'LUNART', 'it says whose it was');
+  assert.equal(parsed.booking_reference, '6213834462', 'and which message, so staff can find it');
+  assert.equal('event' in parsed, false, 'there is nothing to file');
+  assert.ok(!JSON.stringify(parsed).includes('Kay'), 'the guest was never read');
+});
+
+test('ingesting it files nothing, and tells staff once however often it arrives', async () => {
+  const db = store();
+
+  const first = await ingestMessage({ store: db, message: REAL.LUNART });
+  assert.equal(first.ok, false);
+  assert.equal(first.reason, 'other-property');
+  assert.equal((await db.reservations.list({})).length, 0, 'no reservation');
+  assert.equal((await db.deliveries.list({})).length, 0, 'and so no guide email');
+
+  const alerts = await db.alerts.open();
+  assert.equal(alerts.length, 1);
+  assert.equal(alerts[0].kind, 'other-property-notification',
+    'not "unreadable": it read fine, and it means the mailbox query is wrong');
+  assert.equal(alerts[0].detail.property, 'LUNART');
+  assert.ok(!JSON.stringify(alerts).includes('Kay'), 'nothing about the guest is kept, not even in the alert');
+
+  // The next poll sees the same message. Still nothing filed, still one alert.
+  const again = await ingestMessage({ store: db, message: REAL.LUNART });
+  assert.equal(again.reason, 'other-property');
+  assert.equal((await db.reservations.list({})).length, 0);
+  const after = await db.alerts.open();
+  assert.equal(after.length, 1, 'one alert, counted, not two rows');
+  assert.equal(after[0].seen, 2);
+});
+
+test('in a batch, LunArt’s notification is neither a stay nor noise', async () => {
+  const db = store();
+  // Ours and LunArt's share a booking number because the fixture was derived from
+  // the real LunArt message, which makes this the sharpest version of the check:
+  // the refusal comes before any lookup by number could reach Kelly's stay.
+  const outcome = await ingestMessages({
+    store: db, messages: [REAL.SCHEDINE, REAL.IRENE, REAL.KELLY, REAL.LUNART],
+  });
+  assert.equal(outcome.created, 2, 'Irene and Kelly, ours');
+  assert.equal(outcome.ignored, 1, 'the police forms, quietly');
+  assert.equal(outcome.failed, 1, 'LunArt’s is not dropped in silence');
+  assert.equal(outcome.modified, 0, 'and it changed nothing of ours');
+
+  const kelly = await db.reservations.findByBooking('quovai', '6213834462');
+  assert.equal(kelly.room, 'Deluxe', 'still our Deluxe, not LunArt’s 305');
+  assert.equal(kelly.history.filter((entry) => entry.type !== 'created').length, 0,
+    'and nothing was written against it');
+
+  const alerts = await db.alerts.open();
+  assert.deepEqual(alerts.map((a) => a.kind), ['other-property-notification']);
+});
+
+test('a Bella Vigna notification is read, in whichever way QuoVai spells the name', () => {
+  for (const name of ['BELLA VIGNA', 'Bella Vigna', 'Bella Vigna Firenze', 'BELLAVIGNA']) {
+    const parsed = parseQuovaiEmail({
+      ...REAL.IRENE,
+      body: REAL.IRENE.body.replace('Struttura: BELLA VIGNA', `Struttura: ${name}`),
+    });
+    assert.equal(parsed.ok, true, `${name}: ${parsed.reason}`);
+    assert.equal(parsed.event.property, name);
+    assert.equal(parsed.event.last_name, 'Cappellini');
+  }
+  for (const name of ['LUNART', 'LunArt']) {
+    const parsed = parseQuovaiEmail({
+      ...REAL.IRENE,
+      body: REAL.IRENE.body.replace('Struttura: BELLA VIGNA', `Struttura: ${name}`),
+    });
+    assert.equal(parsed.ok, false, name);
+    assert.equal(parsed.reason, 'other-property');
+  }
+});
+
+test('a Bella Vigna notification goes all the way through', async () => {
+  const db = store();
+  const result = await ingestMessage({ store: db, message: REAL.IRENE });
+  assert.equal(result.action, 'created');
+  assert.equal(result.reservation.last_name, 'Cappellini');
+  assert.equal(result.reservation.room, 'Standard');
+  assert.equal((await db.alerts.open()).length, 0, 'and nobody is told anything');
+});
+
+test('a notification that names no property at all is still read', async () => {
+  // The mailbox query is what scopes the messages; a notification that names no
+  // property names no other property either.
+  const parsed = parseQuovaiEmail(REAL.UNNAMED_PROPERTY);
+  assert.equal(parsed.ok, true, parsed.reason);
+  assert.equal(parsed.event.property, '');
+  assert.equal(parsed.event.first_name, 'Irene');
+  assert.equal(parsed.event.last_name, 'Cappellini');
+  assert.equal(parsed.event.room, 'Standard');
+
+  const db = store();
+  const result = await ingestMessage({ store: db, message: REAL.UNNAMED_PROPERTY });
+  assert.equal(result.action, 'created');
+  assert.equal((await db.alerts.open()).length, 0);
+});
+
+test('repair takes no correction from another property’s notification', async () => {
+  const { store } = await staleStore();
+  const before = await store.reservations.findByBooking('quovai', '6213834462NEW');
+
+  const result = await repairFromMailbox({ store, mailbox: createMemoryMailbox([REAL.LUNART]) });
+  assert.equal(result.reservations, 0, 'not one of ours');
+  assert.equal(result.matched, 0, 'so it is never matched, even under a number we hold');
+  assert.equal(result.repaired, 0);
+  assert.deepEqual(result.problems.map((p) => p.reason), ['other-property']);
+
+  const after = await store.reservations.get(before.id);
+  assert.equal(after.last_name, '', 'Kelly’s stay did not get LunArt’s copy of her name');
+  assert.equal(after.room, '');
+  assert.equal(after.history.length, before.history.length);
 });

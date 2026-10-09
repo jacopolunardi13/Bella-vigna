@@ -160,6 +160,22 @@ export const INTENTS = ALL_INTENTS
 
 const known = new Set(INTENTS.map((intent) => intent.id));
 
+/**
+ * Topics this property does not publish anything about.
+ *
+ * The anchors of the intents dropped above that no remaining intent is anchored
+ * on: at Bella Vigna, the heated towel rail and the welcome prosecco. A question
+ * about one of them is about something this house may simply not have, and the
+ * engine hands it to a person instead of letting a supporting word ("rail",
+ * "cold") pull it towards the nearest unrelated answer. Empty for a property
+ * whose knowledge layer covers the whole table, so LunArt is unaffected.
+ */
+const kept = new Set(INTENTS.flatMap((intent) => intent.anchors ?? []));
+export const UNPUBLISHED_TOPICS = new Set(ALL_INTENTS
+  .filter((intent) => !answerable(intent.entry))
+  .flatMap((intent) => intent.anchors ?? [])
+  .filter((concept) => !kept.has(concept)));
+
 /** Offered on a fallback, and as the opening suggestions, per guest phase. */
 export const QUICK_REPLIES = Object.fromEntries(Object.entries({
   before:  ['checkin', 'access', 'parking', 'luggage'],

@@ -431,6 +431,15 @@ export const UI = {
   },
 };
 
+/**
+ * The few interface sentences that state a fact about the house rather than about
+ * the interface. LunArt's Pass note says to show it "with the breakfast token",
+ * which is true there for every guest; at Bella Vigna breakfast depends on the
+ * rate, so the property overrides the sentence in `data/brand.js` instead of the
+ * core carrying two versions of it.
+ */
+for (const lang of ['it', 'en']) Object.assign(UI[lang], brand.uiOverrides?.[lang] ?? {});
+
 /** Browser preference first, then whatever the guest last chose. */
 /**
  * Fill the placeholders in one interface string.

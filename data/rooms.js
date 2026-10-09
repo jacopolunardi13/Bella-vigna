@@ -35,7 +35,7 @@ export const roomRegistry = [
   },
   {
     id: 'Terrazza',
-    aliases: ['terrace', 'con terrazza', 'camera con terrazza', 'doppia/tripla con terrazza', 'doppia tripla con terrazza', 'terrace room'],
+    aliases: ['terrace', 'con terrazza', 'camera con terrazza', 'camera terrazza', 'doppia/tripla con terrazza', 'doppia tripla con terrazza', 'terrace room'],
     label: { it: 'Terrazza', en: 'Terrace' },
   },
 ];
@@ -46,7 +46,7 @@ export const rooms = [
   {
     id: 'Standard',
     number: 'Standard',
-    category: { it: 'Camera Standard', en: 'Standard room' },
+    category: { it: 'Travertino e caramello', en: 'Travertine and caramel' },
     summary: {
       it: 'La più raccolta della casa: lampade in travertino e un bagno nei toni del caramello.',
       en: 'The snuggest room in the house: travertine lamps and a bathroom in caramel tones.',
@@ -60,7 +60,7 @@ export const rooms = [
   {
     id: 'Deluxe',
     number: 'Deluxe',
-    category: { it: 'Camera Deluxe', en: 'Deluxe room' },
+    category: { it: 'Bagno doppio, due docce', en: 'Double bathroom, two showers' },
     highlight: true,
     summary: {
       it: 'Luminosa e spaziosa, pensata per le coppie: bagno doppio con due docce, rivestimenti verdi e lavabo freestanding.',
@@ -77,13 +77,13 @@ export const rooms = [
   {
     id: 'Terrazza',
     number: 'Terrazza',
-    category: { it: 'Doppia/Tripla con Terrazza', en: 'Double/Triple with Terrace' },
+    category: { it: 'Doppia/Tripla con terrazza', en: 'Double/Triple with terrace' },
     summary: {
       it: 'Con una terrazza privata tra le viti — è da qui che viene il nome della casa. Travi a vista e frigobar in camera.',
       en: 'With a private terrace among the vines — the house takes its name from it. Exposed beams and a minibar in the room.',
     },
     photos: [
-      { src: 'property/terrazza', alt: { it: 'La terrazza privata, con il salottino tra le piante', en: 'The private terrace, its lounge among the plants' } },
+      { src: 'rooms/terrazza-esterno', alt: { it: 'La terrazza privata, con il salottino tra le piante', en: 'The private terrace, its lounge among the plants' } },
       { src: 'rooms/terrazza-camera', alt: { it: 'Camera con terrazza, travi a vista e porta finestra', en: 'Terrace room, exposed beams and French window' } },
       { src: 'rooms/terrazza-letto', alt: { it: 'Il letto della camera con terrazza', en: 'The bed in the terrace room' } },
       { src: 'rooms/terrazza-bagno', alt: { it: 'Bagno della camera con terrazza', en: 'Terrace room bathroom' } },

@@ -167,6 +167,26 @@ def main():
         flat.resize((width, round(width * H / W)), Image.LANCZOS).save(
             out(f'assets/img/pass/bella-vigna-pass-{width}.webp'), 'WEBP', quality=86, method=6)
 
+    # ── "Discover Florence": the logo's skyline in gold on the house's dark ink,
+    # so the white caption the card sets over its foot keeps its contrast. The
+    # guide has no photograph of Florence that is Bella Vigna's own, and LunArt's
+    # are LunArt's.
+    FW, FH = 2048, 1365
+    night = gradient((FW, FH), (46, 37, 25), (24, 19, 12))
+    lit = skyline.copy()
+    lit_w = int(FW * .78)
+    lit = lit.resize((lit_w, int(lit.height * lit_w / lit.width)), Image.LANCZOS)
+    r, g, bl, a = lit.split()
+    lit = Image.merge('RGBA', (r.point(lambda v: min(255, int(v * 1.35))), g.point(lambda v: min(255, int(v * 1.3))),
+                              bl.point(lambda v: min(255, int(v * 1.2))), a.point(lambda v: int(v * .9))))
+    night.alpha_composite(lit, ((FW - lit_w) // 2, int(FH * .16)))
+    flat_night = night.convert('RGB')
+    for width in (1024, 700, 400):
+        flat_night.resize((width, round(width * FH / FW)), Image.LANCZOS).save(
+            out(f'assets/img/brand/firenze-{width}.webp'), 'WEBP', quality=84, method=6)
+    flat_night.resize((800, round(800 * FH / FW)), Image.LANCZOS).save(
+        out('assets/img/brand/firenze-800.jpg'), 'JPEG', quality=80, optimize=True, progressive=True)
+
     # ── Icon: the logo's own B and V, on paper.
     b, v = b_glyph, v_glyph
     gap = 4

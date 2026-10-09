@@ -5,7 +5,7 @@
  * white — so the text in `index.html` is a real rendering of it rather than a
  * placeholder, and it stays until there is a file that does the job better.
  *
- * When that file arrives it goes in at `assets/img/brand/lunart-wordmark.svg` and
+ * The file is `brand.mark` in `data/brand.js` (Bella Vigna: `bella-vigna-mark.webp`) and
  * this swaps it in. See the README in that folder for what the file has to be.
  *
  * ── Why it is loaded this way ─────────────────────────────────────────────────
