@@ -57,8 +57,21 @@ page.on('console', (m) => { if (m.type() === 'error' && isRealError(m.text())) e
 
 /* ── Find a reservation to use ────────────────────────────────────────── */
 
+/**
+ * The staff token, when the server has one.
+ *
+ * A preview with `STAFF_TOKEN` set guards the staff API like production does, so
+ * this script presents the same token Diego types into the Staff app — read from
+ * the environment, never written here. Without one, every staff route falls open
+ * together on a development server, and nothing is sent.
+ */
+const STAFF_TOKEN = process.env.STAFF_TOKEN ?? '';
+const staffAuth = STAFF_TOKEN ? { authorization: `Bearer ${STAFF_TOKEN}` } : {};
+
 const post = (path, body = {}) => fetch(`${BASE}${path}`, {
-  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  method: 'POST',
+  headers: { 'content-type': 'application/json', ...(path.startsWith('/api/staff/') ? staffAuth : {}) },
+  body: JSON.stringify(body),
 }).then((response) => response.json());
 
 const today = new Date().toISOString().slice(0, 10);
@@ -239,6 +252,16 @@ staffPage.on('console', (m) => { if (m.type() === 'error' && isRealError(m.text(
 await staffPage.goto(`${BASE}/staff`, { waitUntil: 'networkidle' });
 await staffPage.waitForTimeout(900);
 
+/* With a token on the server, the app asks for it before it shows anything — the
+   way Diego meets it on a new phone — and the token typed once opens it. */
+if (STAFF_TOKEN) {
+  note(await staffPage.isVisible('#gate'), 'the staff app asks for its token before showing anything');
+  await staffPage.fill('#token', STAFF_TOKEN);
+  await staffPage.click('#enter');
+  await staffPage.waitForTimeout(1200);
+  note(await staffPage.isHidden('#gate'), 'and the token opens it');
+}
+
 note(await staffPage.isVisible('.bar'), 'the staff app opens');
 note((await staffPage.locator('.tab').count()) >= 7, 'every section has a tab');
 note(await staffPage.isVisible('.grid'), 'the dashboard shows the counts');
@@ -394,7 +417,7 @@ note(/la guida parte da sé tre giorni prima/.test(dryRun),
   'and says why they are not in the list, rather than only excluding them');
 note(/parte /.test(dryRun), 'with the morning each one is due');
 
-const catchUpApi = await (await fetch(`${BASE}/api/staff/sync/guide-catchup`)).json();
+const catchUpApi = await (await fetch(`${BASE}/api/staff/sync/guide-catchup`, { headers: staffAuth })).json();
 const waitingRow = (catchUpApi.skipped ?? []).find((r) => r.reservation_id === notDueRow.reservation.id);
 note(waitingRow?.reason === 'not-due-yet',
   `a stay six weeks out is not backlog (${waitingRow?.reason ?? 'missing from the answer'})`);

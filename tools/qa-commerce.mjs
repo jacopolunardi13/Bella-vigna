@@ -4,7 +4,11 @@
  *
  * Not a unit test: it clicks what a guest clicks. Pick a bottle, choose an
  * evening, add it, check out, pay on the stand-in, come back to a paid order —
- * then buy a card, open it, and validate it on the venue's page.
+ * then reach for the Privilege Card and find it honestly withheld: at Bella Vigna
+ * no venue has confirmed an agreement yet, so there is nothing to buy, no card to
+ * open and no venue page to validate it on. Those mechanics are proved by the unit
+ * tests against a property fixture (`test/privilege-card.test.mjs`,
+ * `test/card.test.mjs`, `test/card-qr-slot.test.mjs`).
  *
  * Needs the server running:
  *   npm run dev &
@@ -15,9 +19,17 @@ import { mkdir, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { propertyDate } from '../commerce/time.js';
+import { storageKey } from '../data/brand.js';
+import { ROOM_IDS } from '../commerce/rooms.js';
+import { cardPartners, stayPartners, PROPERTY_AGREEMENTS, AGREEMENT } from '../commerce/partners.js';
+
+/** Bella Vigna's rooms have names, not numbers: the guest types one of them. */
+const ROOM = ROOM_IDS[0];
+/** `bellavigna.cart.v1`: the basket lives under this property's own prefix. */
+const CART_KEY = storageKey('cart.v1');
 
 const OUT = new URL('.qa-screens/', import.meta.url).pathname;
-const BASE = process.env.BASE_URL ?? 'http://localhost:4173/';
+const BASE = (process.env.BASE_URL ?? 'http://localhost:4173/').replace(/\/?$/, '/');
 await mkdir(OUT, { recursive: true });
 
 async function launch() {
@@ -80,15 +92,20 @@ note(await addButton.isDisabled(), 'cannot add before the choices are made');
 await page.selectOption('select[name="variantId"]', 'brunello');
 await page.fill('input[name="date"]', inDays(3));
 await page.selectOption('select[name="slotId"]', 'w-1900');
-await page.fill('input[name="room"]', '303');
+await page.fill('input[name="room"]', ROOM);
 await page.waitForTimeout(400);
 
 const summary = await page.textContent('[data-summary]');
-// The Brunello at LunArt's own confirmed price, with the notice an order under
-// ninety euros needs.
+// The Brunello at the figure carried over from LunArt as a placeholder
+// (`commerce/prices.js`), with the notice an order under ninety euros needs.
 note(/89/.test(summary), `the sheet shows the price (${summary.replace(/\s+/g, ' ').trim().slice(0, 60)})`);
 note(/12|ore|hours/.test(summary), 'and the notice the order needs');
 note(/preavviso|notice/i.test(summary), 'it states the notice the bottle needs');
+// A placeholder is sellable in the preview, and it says so rather than passing for
+// Bella Vigna's own price.
+const provisional = await page.textContent('.terms--warn').catch(() => '');
+note(/non è ancora quello definitivo di Bella Vigna|not Bella Vigna’s final price/i.test(provisional),
+  `and says the price is not Bella Vigna’s final one yet (${provisional.replace(/\s+/g, ' ').trim().slice(0, 50)})`);
 
 // What happens if they change their mind, said before they decide rather than
 // after. Drawn from the product's own policy, so it cannot drift from the rule the
@@ -112,7 +129,7 @@ await page.check('input[name="variantId"][value="opera"]', { force: true });
 await page.fill('input[name="date"]', inDays(2));
 await page.selectOption('select[name="slotId"]', 'b-0900');
 await page.selectOption('select[name="option:hotDrink"]', 'cappuccino');
-await page.fill('input[name="room"]', '303');
+await page.fill('input[name="room"]', ROOM);
 await page.waitForTimeout(400);
 await page.click('[data-add]');
 await page.waitForTimeout(700);
@@ -134,7 +151,7 @@ await page.screenshot({ path: `${OUT}/cart-390.png` });
 console.log('\n── checkout ──');
 await page.fill('input[name="name"]', 'Jacopo Lunardi');
 await page.fill('input[name="email"]', 'jacopo@example.com');
-await page.fill('input[name="room"]', '303');
+await page.fill('input[name="room"]', ROOM);
 await page.click('.checkout-form button[type="submit"]');
 await page.waitForURL(/mock-checkout/, { timeout: 8000 });
 note(true, 'checkout hands over to the payment page');
@@ -188,7 +205,7 @@ await page.waitForTimeout(500);
 await page.selectOption('select[name="variantId"]', 'vermentino');
 await page.fill('input[name="date"]', inDays(4));
 await page.selectOption('select[name="slotId"]', 'w-2000');
-await page.fill('input[name="room"]', '303');
+await page.fill('input[name="room"]', ROOM);
 await page.waitForTimeout(300);
 await page.click('[data-add]');
 await page.waitForTimeout(600);
@@ -198,121 +215,100 @@ const afterReload = await page.textContent('.cart-button__count').catch(() => '0
 note(afterReload.trim() === '1',
   `the paid basket was emptied and the new bottle survives a reload (${afterReload.trim()})`);
 
-/* ── The Privilege Card ───────────────────────────────────────────────── */
-console.log('\n── privilege card ──');
-await page.evaluate(() => localStorage.removeItem('lunart.cart.v1'));
+/* ── The Privilege Card, withheld ─────────────────────────────────────────
+   At LunArt this bought a five-day card, opened it, and scanned it at L'Opera
+   Caffè. At Bella Vigna none of that can exist yet: the venues are LunArt's, and
+   until each one confirms that its agreement covers Bella Vigna guests
+   (`PROPERTY_AGREEMENTS`) no benefit stands behind the card — so the upgrade is
+   withheld everywhere, preview included, rather than sold empty. What a guest
+   meets is that honest state, and it is walked the same way a purchase would be:
+   the tile, the sheet, the button, and the checkout behind the button.
+
+   The card screen, its rotating QR and the venue's verdict are proved by the unit
+   tests against a property fixture (test/privilege-card.test.mjs,
+   test/card.test.mjs, test/card-qr-slot.test.mjs). The first check below is the
+   tripwire: the day a venue is confirmed it fails, and that is the signal to walk
+   the purchase here again rather than to keep asserting it cannot happen. */
+console.log('\n── privilege card (no agreement confirmed yet) ──');
+const pending = Object.entries(PROPERTY_AGREEMENTS)
+  .filter(([, agreement]) => agreement.status !== AGREEMENT.confirmed)
+  .map(([id]) => id);
+note(cardPartners().length === 0 && stayPartners().length === 0 && pending.length > 0,
+  `no venue has a confirmed agreement for Bella Vigna yet (${pending.length} pending: ${pending.join(', ')})`);
+
+await page.evaluate((key) => localStorage.removeItem(key), CART_KEY);
+await page.goto(`${BASE}#/shop`, { waitUntil: 'networkidle' });
+await page.waitForTimeout(600);
+const cardTile = page.locator('#main .card[data-product="privilege-card"]');
+note((await cardTile.count()) === 1, 'the shop still shows the Privilege Card rather than hiding it');
+const tileText = (await cardTile.first().innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
+note(/Prezzo da definire|Price to be set/i.test(tileText), `marked as not on sale yet (…${tileText.slice(-30)})`);
+note(!/€\s?\d|\d\s?€/.test(tileText), 'with no price on the tile');
+
 await page.goto(`${BASE}#/product/privilege-card`, { waitUntil: 'networkidle' });
 await page.waitForTimeout(600);
 await page.check('input[name="variantId"][value="5d"]', { force: true });
 await page.fill('input[name="date"]', today);
 await page.fill('input[name="field:holderName"]', 'Jacopo Lunardi');
 await page.waitForTimeout(400);
-const cardSummary = await page.textContent('[data-summary]');
-note(/25/.test(cardSummary), `the five-day card is EUR 25 (${cardSummary.replace(/\s+/g, ' ').trim().slice(0, 40)})`);
+const cardSummary = (await page.textContent('[data-summary]')).replace(/\s+/g, ' ').trim();
+note(/non è ancora acquistabile|not on sale yet/i.test(cardSummary),
+  `the sheet says it is not on sale yet (${cardSummary.slice(0, 50)})`);
+note(await page.locator('[data-add]').isDisabled(), 'and it cannot go in the basket, even with every field filled in');
+await page.screenshot({ path: `${OUT}/card-withheld-390.png` });
 
-await page.click('[data-add]');
-await page.waitForTimeout(700);
-await page.fill('input[name="name"]', 'Jacopo Lunardi');
-await page.fill('input[name="email"]', 'jacopo@example.com');
-await page.click('.checkout-form button[type="submit"]');
-await page.waitForURL(/mock-checkout/, { timeout: 8000 });
-await page.click('[data-pay]');
-await page.waitForURL(/#\/order\//, { timeout: 8000 });
-await page.waitForTimeout(900);
+// Not only the button: the checkout behind it refuses the line as well, so a
+// request that skips the form gets the same answer and no card is ever issued.
+// Asked from here rather than from the page, because a refusal is the expected
+// answer and the browser would log it as an error.
+const direct = await fetch(new URL('api/checkout', BASE), {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({
+    lang: 'en',
+    customer: { name: 'Jacopo Lunardi', email: 'jacopo@example.com' },
+    lines: [{ productId: 'privilege-card', variantId: '5d', quantity: 1, date: today, fields: { holderName: 'Jacopo Lunardi' } }],
+  }),
+}).then(async (response) => ({ status: response.status, ...(await response.json().catch(() => ({}))) }));
+note(direct.status === 422 && (direct.errors ?? []).some((e) => e.reason === 'no-card-partner'),
+  `the checkout refuses it too, for the reason that is true (${direct.status} ${(direct.errors ?? []).map((e) => e.reason ?? e.code).join(', ')})`);
+note(!direct.accessToken && !direct.checkoutUrl, 'so no order, no payment page and no card exist');
+await page.click('.sheet [data-close]');
+await page.waitForTimeout(400);
 
-note(await page.isVisible('[data-card]'), 'the paid order carries the card');
-await page.click('[data-card]');
-await page.waitForTimeout(1300);
-
-const cardText = await page.textContent('.sheet__body');
-note(await page.isVisible('.privilege-card'), 'the card screen opens');
-// The mark used to be drawn in CSS next to the title; it is now in the artwork —
-// the LA lock-up is the centre of the voucher's own painting — so what is checked is
-// that the card is actually wearing that painting.
-const cardPlate = await page.evaluate(() => getComputedStyle(
-  document.querySelector('.privilege-card'), '::before').backgroundImage);
-// Not named: the artwork is allowed to change, and `qa:pass` is what checks that
-// every card face wears the *same* one. Here it only has to be wearing a real image.
-note(/\.webp/.test(cardPlate), `it carries the LunArt artwork (${cardPlate.match(/[^/]+\.webp/)?.[0] ?? cardPlate.slice(0, 40)})`);
-const cardMark = await page.evaluate(() => {
-  const img = document.querySelector('.privilege-card .pass__mark');
-  return img ? img.naturalWidth > 0 : false;
-});
-note(cardMark, 'and the LunArt mark, since the artwork no longer contains one');
-// Named on the screen, not necessarily on the card. The face used to repeat
-// "LunArt Privilege Card" under a mark that already said LunArt; the sheet's own
-// title carries the product name and the face carries the tier chip.
-const cardScreen = await page.textContent('.sheet');
-note(/Privilege Card/i.test(cardScreen), 'and names the product');
-note(/privilege/i.test(await page.textContent('.privilege-card__kind')), 'with the tier on the card itself');
-note(/Jacopo Lunardi/.test(cardText), 'it shows the holder');
-note(/2 (persone|guests)/i.test(cardText), 'it says it is valid for two');
-note(await page.isVisible('.card-qr__frame svg'), 'a QR is drawn');
-// The same slot a card that has not started yet fills with a preview — here it
-// holds the real thing, and wears no seal across it.
-const qrSlot = await page.evaluate(() => ({
-  state: document.querySelector('.sheet .card-qr')?.dataset.state ?? '',
-  live: document.querySelectorAll('.sheet [data-qr]').length,
-  preview: document.querySelectorAll('.sheet [data-qr-preview]').length,
-  seal: document.querySelectorAll('.sheet .card-qr__seal').length,
-}));
-note(qrSlot.state === 'active' && qrSlot.live === 1, 'and it is the live code, in the same slot');
-note(qrSlot.preview === 0 && qrSlot.seal === 0, 'with no preview and nothing sealed across it');
-note((await page.locator('.sheet .status-pill').allTextContents()).some((t) => /Attiva|Active/.test(t)),
-  'it shows the status');
-note(await page.isVisible('.privileges'), 'privileges are listed');
-// Whatever card partner the preview has, with its benefit — and never the Opera
-// Caffè 30%, which comes with the stay and is listed in the guide instead.
-const privilegeText = await page.textContent('.privileges');
-note(privilegeText.trim().length > 20, 'with the partner and the benefit');
-note(!/Opera Caff/.test(privilegeText), 'the stay benefit is not sold as a card benefit');
-await page.screenshot({ path: `${OUT}/card-390.png` });
-
-// The rotation is deliberately invisible: a membership card should not read like
-// a security product.
-note((await page.locator('[data-countdown]').count()) === 0, 'no countdown is shown');
-for (const phrase of ['si aggiorna', 'prossimo codice', 'scade', 'refresh', 'countdown']) {
-  note(!cardText.toLowerCase().includes(phrase), `the screen never says "${phrase}"`);
-}
-
-// ...but it is still rotating underneath.
-const qrUrl = await page.evaluate(async () => {
-  const token = JSON.parse(localStorage.getItem('lunart.cards.v1'))[0];
-  const card = await (await fetch(`/api/card/${token}`)).json();
-  return card.qr;
-});
-note(/\/validate-card\?c=.+&k=/.test(qrUrl), 'the QR points at a validation URL');
-
-/* ── The venue's own page ─────────────────────────────────────────────── */
-console.log('\n── partner page ──');
-const scanned = new URL(qrUrl);
-const reference = scanned.searchParams.get('c');
-const code = scanned.searchParams.get('k');
-
+/* ── The venue's own page ─────────────────────────────────────────────────
+   A venue page is a scanner, and a scanner with no agreement behind it would be a
+   door promising a discount nobody agreed to. So a venue whose agreement for
+   Bella Vigna is pending has none: the page shell loads, finds no partner, and
+   offers neither the venue's name nor a home-screen install, while its API and
+   manifest answer 404. A code shown at the generic page is still checked — and an
+   invented one is still refused, in the agreed words. */
+console.log('\n── partner pages ──');
 const venue = await context.newPage();
-await venue.goto(`${BASE}partner/opera-caffe`, { waitUntil: 'networkidle' });
-await venue.waitForTimeout(800);
-note((await venue.textContent('#partner-name')).includes('Opera'), 'the page knows which venue it belongs to');
-note((await venue.locator('link[rel="manifest"]').count()) === 1, 'it offers its own home-screen install');
-
-await venue.goto(`${BASE}partner/opera-caffe?c=${reference}&k=${code}`, { waitUntil: 'networkidle' });
-await venue.waitForTimeout(1000);
-note((await venue.getAttribute('#verdict', 'data-tone')) === 'good', 'a scan shows the card as valid');
-const verdictText = await venue.textContent('#verdict');
-note(/CARD VALID/.test(verdictText), 'in the agreed words');
-note(/Jacopo Lunardi/.test(verdictText), 'with the holder');
-note(/2 persone/.test(verdictText), 'the two-guest limit');
-note(/Opera Caff/.test(verdictText) && /30%/.test(verdictText), 'and that venue’s own benefit');
-await venue.screenshot({ path: `${OUT}/partner-390.png` });
-
-// Scanned again and again: a card is a membership, not a voucher book.
-for (let scan = 0; scan < 3; scan++) {
-  await venue.reload({ waitUntil: 'networkidle' });
+for (const id of pending) {
+  await venue.goto(`${BASE}partner/${id}`, { waitUntil: 'networkidle' });
   await venue.waitForTimeout(700);
+  const venueName = (await venue.textContent('#partner-name')).trim();
+  note(/sconosciuto/i.test(venueName), `${id} → the page does not present itself as that venue's scanner (${venueName})`);
+  note((await venue.locator('link[rel="manifest"]').count()) === 0, `${id} → and offers no home-screen install`);
+  const [info, manifest] = await Promise.all([
+    fetch(new URL(`api/partners/${id}`, BASE)).then((r) => r.status),
+    fetch(new URL(`partner/${id}/manifest.webmanifest`, BASE)).then((r) => r.status),
+  ]);
+  note(info === 404 && manifest === 404, `${id} → nothing behind it to scan against (${info}, ${manifest})`);
 }
-note((await venue.getAttribute('#verdict', 'data-tone')) === 'good', 'repeated scans stay valid — nothing is consumed');
 
-await venue.goto(`${BASE}partner/opera-caffe?c=ZZZZZZ&k=ZZZZZZ`, { waitUntil: 'networkidle' });
+// The preview's front door says the same thing in words, rather than listing a
+// scanner that would answer "unknown partner".
+await venue.goto(`${BASE}preview`, { waitUntil: 'networkidle' });
+const frontDoor = await venue.evaluate(() => ({
+  scanners: document.querySelectorAll('a[href*="/partner/"]').length,
+  text: document.body.innerText.replace(/\s+/g, ' '),
+}));
+note(frontDoor.scanners === 0, `the preview index lists no venue scanner (${frontDoor.scanners})`);
+note(/Nessun partner ha ancora un accordo confermato/.test(frontDoor.text), 'and says why, in words');
+
+await venue.goto(`${BASE}validate-card?c=ZZZZZZ&k=ZZZZZZ`, { waitUntil: 'networkidle' });
 await venue.waitForTimeout(900);
 note((await venue.getAttribute('#verdict', 'data-tone')) === 'bad', 'an invented code is refused');
 note(/CARD NOT VALID/.test(await venue.textContent('#verdict')), 'in the agreed words');
@@ -321,7 +317,7 @@ await venue.close();
 
 /* ── Private Hair Service ─────────────────────────────────────────────── */
 console.log('\n── private hair service ──');
-await page.evaluate(() => localStorage.removeItem('lunart.cart.v1'));
+await page.evaluate((key) => localStorage.removeItem(key), CART_KEY);
 await page.goto(`${BASE}#/product/hair-service`, { waitUntil: 'networkidle' });
 await page.waitForTimeout(800);
 
@@ -353,7 +349,7 @@ const timeOptions = await page.locator('select[name="time"] option').count();
 note(timeOptions > 1, `times appear once a day is chosen (${timeOptions - 1})`);
 
 await page.selectOption('select[name="time"]', { index: 1 });
-await page.fill('input[name="room"]', '303');
+await page.fill('input[name="room"]', ROOM);
 await page.fill('input[name="field:guestName"]', 'Jacopo Lunardi');
 await page.fill('input[name="field:phone"]', '+39 392 472 5263');
 await page.waitForTimeout(500);

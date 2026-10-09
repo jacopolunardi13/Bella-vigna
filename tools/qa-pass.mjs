@@ -18,8 +18,10 @@
 import { chromium, devices } from 'playwright';
 import { readdir } from 'node:fs/promises'; import { existsSync } from 'node:fs'; import { join } from 'node:path';
 async function launch(){try{return await chromium.launch()}catch(e){const r=process.env.PLAYWRIGHT_BROWSERS_PATH;for(const d of (await readdir(r)).filter(x=>x.startsWith('chromium-'))){const p=join(r,d,'chrome-linux','chrome');if(existsSync(p))return chromium.launch({executablePath:p})}throw e}}
-const B='http://localhost:4173';
-const post=(p,b={})=>fetch(`${B}${p}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(b)}).then(r=>r.json());
+const B=(process.env.BASE_URL??'http://localhost:4173').replace(/\/$/,'');
+// The staff routes are guarded whenever the server has a token: present it, from the environment.
+const STAFF_TOKEN=process.env.STAFF_TOKEN??'';
+const post=(p,b={})=>fetch(`${B}${p}`,{method:'POST',headers:{'content-type':'application/json',...(STAFF_TOKEN&&p.startsWith('/api/staff/')?{authorization:`Bearer ${STAFF_TOKEN}`}:{})},body:JSON.stringify(b)}).then(r=>r.json());
 const inDays=n=>new Date(Date.now()+n*864e5).toISOString().slice(0,10);
 const made=await post('/api/staff/reservations',{first_name:'Flow',last_name:`F${Date.now().toString(36).slice(-4)}`,guest_email:'f@example.invalid',check_in:inDays(30),check_out:inDays(33),room:'303',adults:2,booking_reference:`FLOW-${Date.now()}`});
 const {link}=await post(`/api/staff/reservations/${made.reservation.id}/link`);
