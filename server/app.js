@@ -1084,7 +1084,14 @@ export async function createApp(overrides = {}) {
       email: order.customer?.email ?? '',
       phone,
       room: order.customer?.room ?? order.lines.map((l) => l.room).find(Boolean) ?? '',
-      whatsapp: digits ? `https://wa.me/${digits.replace(/^\+/, '')}` : null,
+      /**
+       * Opened from the shared WhatsApp Business line, so the first words name the
+       * house: the guest sees "Bella Vigna Firenze" before anything else, even if
+       * the profile says LunArt.
+       */
+      whatsapp: digits
+        ? `https://wa.me/${digits.replace(/^\+/, '')}?text=${encodeURIComponent(`${brand.longName} — `)}`
+        : null,
       tel: digits ? `tel:${digits}` : null,
       mailto: order.customer?.email ? `mailto:${order.customer.email}` : null,
     });

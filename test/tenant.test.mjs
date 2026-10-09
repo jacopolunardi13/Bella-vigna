@@ -290,3 +290,24 @@ test('a guest types a Bella Vigna room with a keyboard, not a number pad', async
     assert.doesNotMatch(readFileSync(join(ROOT, file), 'utf8'), /name="room"[^>]*inputmode="numeric"/, `${file} still asks for a number`);
   }
 });
+
+test('when staff message a guest from the shared line, the first words name Bella Vigna', async () => {
+  const app = await createApp({
+    stripe: createMockStripe(), useDevPrices: false, seed: false, publicUrl: 'http://127.0.0.1',
+    staffToken: 'tenant-staff', mode: 'development',
+  });
+  const order = await app.store.orders.create({
+    lines: [], customer: { name: 'Ada', email: 'ada@example.invalid', phone: '+39 333 000 0000', room: 'Deluxe' },
+  });
+  const server = app.listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  try {
+    const response = await fetch(`http://127.0.0.1:${server.address().port}/api/staff/orders/${order.id}/contact`, {
+      headers: { authorization: 'Bearer tenant-staff', 'x-staff-token': 'tenant-staff' },
+    });
+    const body = await response.json();
+    assert.equal(response.status, 200, JSON.stringify(body));
+    assert.match(body.whatsapp, /^https:\/\/wa\.me\/393330000000\?text=/);
+    assert.match(decodeURIComponent(body.whatsapp.split('text=')[1]), /^Bella Vigna Firenze/);
+  } finally { server.close(); }
+});

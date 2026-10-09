@@ -30,7 +30,7 @@ asset), 2 richiedono una working copy git. Nessuna regressione funzionale.
 | Camere | `commerce/rooms.js`, `server/ingest/quovai-email.js`, `server/ingest/ical.js`, `server/dev-seed.js` | Registro camere (`roomRegistry` in `data/rooms.js`) con id e alias; regex costruite dal registro; `roomLabel` | Bella Vigna ha camere con nome, non numeri |
 | Mail | `server/mail/gmail.js` | Nessun mittente predefinito: senza `MAIL_FROM` il mailer è "non configurato" e tutto resta simulato | Non indovinare mai un mittente |
 | Email | `server/delivery.js` | Testo dell'email Guest Guide in `brand.guideEmailCopy` | Il testo LunArt prometteva servizi non validati per BV |
-| WhatsApp | `src/ui/components.js`, `src/ui/views.js`, `src/concierge/ui.js` | Link `wa.me` con testo precompilato che nomina la struttura | Linea WhatsApp condivisa |
+| WhatsApp | `src/ui/components.js`, `src/ui/views.js`, `src/concierge/ui.js`, `server/app.js` (contatto ordine Staff) | Link `wa.me` con testo precompilato che nomina la struttura, sia ospite → struttura sia Staff → ospite | Linea WhatsApp condivisa |
 | Push | `server/push.js`, `staff-sw.js` | Titolo `«Struttura» · …`, tag e campo `property` | Lo stesso telefono riceve due strutture |
 | Dati riservati | `server/private-facts.js` (nuovo), `server/app.js`, `src/guest.js`, `src/ui/sheet.js` | `WIFI_PASSWORD` (mai in preview) consegnata solo al link personale di un soggiorno attivo (dal giorno prima a check-out) | Password mai nel repository né nella guida pubblica |
 | Sicurezza | `server/http.js` | `server/`, `test/`, `tools/`, `docs/`, `legacy/`, `node_modules/`, dotfile, `package*.json`, `render.yaml` non serviti | Il server serviva qualunque file della root (es. un `.env` dimenticato) |

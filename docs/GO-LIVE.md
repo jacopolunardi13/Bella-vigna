@@ -31,7 +31,7 @@ revisione: **`/?review=1`** sull'anteprima (invisibile agli ospiti).
 
 | # | Da fare / confermare | Note |
 |---|---|---|
-| B1 | **WhatsApp Business condiviso** (+39 392 566 1488): nome e foto profilo che vede l'ospite BV; instradamento a Diego; risposte rapide che nominano la struttura | La guida apre ogni chat con "Scrivo da ospite di Bella Vigna Firenze". Se il profilo diventa neutro, aggiornare il testo di `contacts` in `help.js` |
+| B1 | **WhatsApp Business condiviso** (+39 392 566 1488): nome e foto profilo che vede l'ospite BV; instradamento a Diego; etichette e risposte rapide che nominano la struttura | Dettagli in `docs/WHATSAPP.md`. La guida apre ogni chat con "Scrivo da ospite di Bella Vigna Firenze" |
 | B2 | **Mittente email** delle Guest Guide (es. info@bellavignafirenze.it): account, operatività, autorizzazione all'invio Gmail API | `MAIL_FROM`, `MAIL_PROVIDER=gmail`, credenziali Gmail con `gmail.send` |
 | B3 | Dominio/sito e Instagram ufficiali | `data/property.js` → `unverifiedContacts` |
 | B4 | **Wi-Fi**: verificare il QR fisico nelle 3 camere; se si vuole la password come riserva sul link personale, inserirla **solo** come variabile `WIFI_PASSWORD` del servizio di produzione | Mai nel repository, nei log o in documenti |
