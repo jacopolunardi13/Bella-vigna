@@ -1,5 +1,17 @@
 /**
- * Every amount LunArt charges, in one file.
+ * Every amount the property charges, in one file.
+ *
+ * ── Bella Vigna ─────────────────────────────────────────────────────────────
+ *
+ * The catalogue and its figures are LunArt's (operator's decision: same model and
+ * catalogue, Property Pack §8), and none of them is validated for Bella Vigna yet.
+ * So every amount LunArt confirmed for itself is carried here as `placeholder`,
+ * with its provenance in `source`: a staging server (GUIDE_PREVIEW or
+ * ALLOW_PLACEHOLDER_PRICES) can walk every purchase with test money, and a
+ * production server sells nothing until the operator confirms a price for Bella
+ * Vigna by changing its status to `confirmed` — one word, per line.
+ *
+ * ── The model (unchanged from the LunArt core) ──────────────────────────────
  *
  * This is the file to edit to set commercial terms. Nothing else in the codebase
  * contains a price, and the server reads it directly — the browser is shown prices
@@ -32,23 +44,26 @@ export const PRICE_STATUS = {
 
 export const CURRENCY = 'EUR';
 
+/** Where every Bella Vigna figure below comes from until the operator confirms it. */
+const FROM_LUNART = 'Prezzo confermato da LunArt per LunArt (golden 51ac362). Per Bella Vigna da validare: non vendibile in produzione finché non diventa “confirmed”.';
+
 /** Keyed by SKU: either `productId` or `productId:variantId`. */
 export const PRICES = {
   // ── Privilege Card ───────────────────────────────────────────────────────
-  'privilege-card:2d': { amount: 1500, status: 'confirmed' },
-  'privilege-card:5d': { amount: 2500, status: 'confirmed' },
-  'privilege-card:8d': { amount: 3500, status: 'confirmed' },
+  'privilege-card:2d': { amount: 1500, status: 'placeholder', source: FROM_LUNART },
+  'privilege-card:5d': { amount: 2500, status: 'placeholder', source: FROM_LUNART },
+  'privilege-card:8d': { amount: 3500, status: 'placeholder', source: FROM_LUNART },
 
   // ── Private Hair Service ─────────────────────────────────────────────────
   // Carried out in the guest's own room by the professional LunArt works with.
   // No wash service: hair should already be washed, and the professional damps it
   // down with his own spray where the cut needs it.
-  'hair-service:men-cut':        { amount: 4900, status: 'confirmed' },
-  'hair-service:men-beard':      { amount: 3500, status: 'confirmed' },
-  'hair-service:men-cut-beard':  { amount: 6900, status: 'confirmed' },
-  'hair-service:women-blowdry':  { amount: 7900, status: 'confirmed' },
-  'hair-service:women-cut-blow': { amount: 9500, status: 'confirmed' },
-  'hair-service:women-evening':  { amount: 8900, status: 'confirmed' },
+  'hair-service:men-cut':        { amount: 4900, status: 'placeholder', source: FROM_LUNART },
+  'hair-service:men-beard':      { amount: 3500, status: 'placeholder', source: FROM_LUNART },
+  'hair-service:men-cut-beard':  { amount: 6900, status: 'placeholder', source: FROM_LUNART },
+  'hair-service:women-blowdry':  { amount: 7900, status: 'placeholder', source: FROM_LUNART },
+  'hair-service:women-cut-blow': { amount: 9500, status: 'placeholder', source: FROM_LUNART },
+  'hair-service:women-evening':  { amount: 8900, status: 'placeholder', source: FROM_LUNART },
   // Not shown and not on sale until the provider confirms it. Colour and
   // highlights are not offered at all, which is why no SKU exists for them.
   'hair-service:ceremony':       { amount: null, status: 'to-configure' },
@@ -57,31 +72,31 @@ export const PRICES = {
   // Both are for two people. The room already has a Nespresso machine and a
   // kettle, so the light breakfast brings no hot drink; the brunch carries the
   // juice and hot drink from the Opera menu.
-  'light-breakfast': { amount: 4900, status: 'confirmed' },
-  'brunch:opera':    { amount: 6900, status: 'confirmed' },
-  'brunch:mare':     { amount: 6900, status: 'confirmed' },
+  'light-breakfast': { amount: 4900, status: 'placeholder', source: FROM_LUNART },
+  'brunch:opera':    { amount: 6900, status: 'placeholder', source: FROM_LUNART },
+  'brunch:mare':     { amount: 6900, status: 'placeholder', source: FROM_LUNART },
   /** Arranged by asking, for an early departure. No price has been set. */
   'sunrise-breakfast': { amount: null, status: 'to-configure' },
 
   // ── Transfer ─────────────────────────────────────────────────────────────
   'transfer-airport': {
-    amount: 9000, status: 'confirmed',
-    source: 'Tariffa LunArt per il transfer privato da/per l’aeroporto di Firenze.',
+    amount: 9000, status: 'placeholder',
+    source: `Tariffa LunArt per il transfer privato da/per l’aeroporto di Firenze. ${FROM_LUNART}`,
   },
   /** Per oversized or extra large item, beyond the standard allowance. */
-  'transfer-airport:oversized': { amount: 1500, status: 'confirmed' },
+  'transfer-airport:oversized': { amount: 1500, status: 'placeholder', source: FROM_LUNART },
 
   // ── Luggage transfer ─────────────────────────────────────────────────────
-  'luggage-transfer:smn':     { amount: 5000,  status: 'confirmed' },
-  'luggage-transfer:centro':  { amount: 6000,  status: 'confirmed' },
-  'luggage-transfer:airport': { amount: 9000,  status: 'confirmed' },
-  'luggage-transfer:comune':  { amount: 10000, status: 'confirmed' },
-  'luggage-transfer:oversized': { amount: 1500, status: 'confirmed' },
+  'luggage-transfer:smn':     { amount: 5000,  status: 'placeholder', source: FROM_LUNART },
+  'luggage-transfer:centro':  { amount: 6000,  status: 'placeholder', source: FROM_LUNART },
+  'luggage-transfer:airport': { amount: 9000,  status: 'placeholder', source: FROM_LUNART },
+  'luggage-transfer:comune':  { amount: 10000, status: 'placeholder', source: FROM_LUNART },
+  'luggage-transfer:oversized': { amount: 1500, status: 'placeholder', source: FROM_LUNART },
 
   // ── Romantic and celebration set-ups ─────────────────────────────────────
-  'celebration:romantic':  { amount: 12900, status: 'confirmed' },
-  'celebration:signature': { amount: 21900, status: 'confirmed' },
-  'celebration:champagne': { amount: 27900, status: 'confirmed' },
+  'celebration:romantic':  { amount: 12900, status: 'placeholder', source: FROM_LUNART },
+  'celebration:signature': { amount: 21900, status: 'placeholder', source: FROM_LUNART },
+  'celebration:champagne': { amount: 27900, status: 'placeholder', source: FROM_LUNART },
   // The two champagne upgrades are not written down: they are the difference
   // between the bottle in the package and the one being asked for, so changing a
   // wine price changes the upgrade with it. See `upgradePrice` below.
@@ -91,28 +106,28 @@ export const PRICES = {
 };
 
 /**
- * What LunArt charges for a bottle in the room.
+ * What a bottle in the room costs.
  *
- * These are selling prices confirmed by LunArt, which is why they live here rather
- * than being derived from the carta. A bottle with no entry falls back to the carta
+ * LunArt's confirmed selling prices, carried as placeholders for Bella Vigna (see
+ * the header), which is why they live here rather than being derived from the carta. A bottle with no entry falls back to the carta
  * figure as a placeholder, so it renders and says the price is unconfirmed instead
  * of being sold at a number nobody agreed to.
  */
 export const WINE_PRICE_OVERRIDES = {
-  'chianti-barrique':   { amount: 3900 },
-  'chianti-riserva':    { amount: 6500 },
-  amarone:              { amount: 7500 },
-  bolgheri:             { amount: 7900 },
-  brunello:             { amount: 8900 },
-  vermentino:           { amount: 4300 },
-  chardonnay:           { amount: 4500 },
-  vernaccia:            { amount: 5900 },
-  'rose-fermo':         { amount: 5500 },
-  'prosecco-cuvee':     { amount: 5500 },
-  'franciacorta-saten': { amount: 10500 },
-  'moet-chandon':       { amount: 15900 },
-  'ruinart-bdb':        { amount: 29900 },
-  'dom-perignon':       { amount: 59000 },
+  'chianti-barrique':   { amount: 3900, status: 'placeholder', source: FROM_LUNART },
+  'chianti-riserva':    { amount: 6500, status: 'placeholder', source: FROM_LUNART },
+  amarone:              { amount: 7500, status: 'placeholder', source: FROM_LUNART },
+  bolgheri:             { amount: 7900, status: 'placeholder', source: FROM_LUNART },
+  brunello:             { amount: 8900, status: 'placeholder', source: FROM_LUNART },
+  vermentino:           { amount: 4300, status: 'placeholder', source: FROM_LUNART },
+  chardonnay:           { amount: 4500, status: 'placeholder', source: FROM_LUNART },
+  vernaccia:            { amount: 5900, status: 'placeholder', source: FROM_LUNART },
+  'rose-fermo':         { amount: 5500, status: 'placeholder', source: FROM_LUNART },
+  'prosecco-cuvee':     { amount: 5500, status: 'placeholder', source: FROM_LUNART },
+  'franciacorta-saten': { amount: 10500, status: 'placeholder', source: FROM_LUNART },
+  'moet-chandon':       { amount: 15900, status: 'placeholder', source: FROM_LUNART },
+  'ruinart-bdb':        { amount: 29900, status: 'placeholder', source: FROM_LUNART },
+  'dom-perignon':       { amount: 59000, status: 'placeholder', source: FROM_LUNART },
 };
 
 /**
@@ -182,7 +197,7 @@ export function resolvePrice(sku) {
     return {
       amount: bottle.sourcePrice,
       status: 'placeholder',
-      source: 'Prezzo della carta vini (colonna bottiglia). Prezzo LunArt in camera da confermare.',
+      source: 'Prezzo della carta vini (colonna bottiglia). Prezzo in camera da confermare.',
       sku,
     };
   }

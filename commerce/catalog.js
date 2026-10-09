@@ -16,6 +16,7 @@
 import { DELIVERY_SLOTS } from './schema.js';
 import { curatedWines, leadTimeMinutesFor } from './wine.js';
 import { CELEBRATION_UPGRADES } from './prices.js';
+import { brand } from '../data/brand.js';
 
 /** The curated wine selection, as sellable variants. */
 function wineVariants() {
@@ -48,7 +49,7 @@ export const PRODUCTS = [
     featured: true,
     status: 'active',
     active: true,
-    title: { it: 'LunArt Privilege Card', en: 'LunArt Privilege Card' },
+    title: { it: brand.privilegeCardName, en: brand.privilegeCardName },
     summary: {
       it: 'Vantaggi riservati nei locali con cui abbiamo un accordo, per te e per chi viaggia con te.',
       en: 'Reserved benefits at the venues we have an agreement with, for you and whoever travels with you.',
@@ -107,8 +108,8 @@ export const PRODUCTS = [
       en: 'Two Special Bowls and a juice, brought to your room. For two people, ordered by noon the day before.',
     },
     description: {
-      it: 'Due Special Bowl dell’Opera Caffè — yogurt alla frutta, cereali e miele — e un succo in bottiglia sigillata.\n\nNon portiamo bevande calde: in camera hai la macchina Nespresso, il bollitore e tè e caffè. Arriva nella fascia che indichi.',
-      en: 'Two Opera Caffè Special Bowls — fruit yoghurt, cereals and honey — and a sealed bottle of juice.\n\nWe bring no hot drinks: the room has a Nespresso machine, a kettle, and tea and coffee. It arrives in the window you pick.',
+      it: 'Due Special Bowl dell’Opera Caffè — yogurt alla frutta, cereali e miele — e un succo in bottiglia sigillata.\n\nNon portiamo bevande calde: in camera hai la macchina Nespresso con caffè e tè. Arriva nella fascia che indichi.',
+      en: 'Two Opera Caffè Special Bowls — fruit yoghurt, cereals and honey — and a sealed bottle of juice.\n\nWe bring no hot drinks: the room has a Nespresso machine with coffee and tea. It arrives in the window you pick.',
     },
     includes: {
       it: ['2 Special Bowl Opera Caffè', 'Yogurt alla frutta', 'Cereali', 'Miele', 'Succo in bottiglia sigillata'],
@@ -302,9 +303,9 @@ export const PRODUCTS = [
     },
     variants: [
       { id: 'from-airport', sku: 'transfer-airport',
-        title: { it: 'Aeroporto di Firenze → LunArt', en: 'Florence airport → LunArt' } },
+        title: { it: `Aeroporto di Firenze → ${brand.name}`, en: `Florence airport → ${brand.name}` } },
       { id: 'to-airport', sku: 'transfer-airport',
-        title: { it: 'LunArt → Aeroporto di Firenze', en: 'LunArt → Florence airport' } },
+        title: { it: `${brand.name} → Aeroporto di Firenze`, en: `${brand.name} → Florence airport` } },
     ],
     quantity: { min: 1, max: 3, step: 1,
       label: { it: 'Numero di auto', en: 'Number of cars' } },
@@ -375,13 +376,13 @@ export const PRODUCTS = [
     },
     variants: [
       { id: 'smn',     sku: 'luggage-transfer:smn',
-        title: { it: 'LunArt ↔ Santa Maria Novella', en: 'LunArt ↔ Santa Maria Novella' } },
+        title: { it: `${brand.name} ↔ Santa Maria Novella`, en: `${brand.name} ↔ Santa Maria Novella` } },
       { id: 'centro',  sku: 'luggage-transfer:centro',
-        title: { it: 'LunArt ↔ indirizzo nel centro storico', en: 'LunArt ↔ an address in the historic centre' } },
+        title: { it: `${brand.name} ↔ indirizzo nel centro storico`, en: `${brand.name} ↔ an address in the historic centre` } },
       { id: 'airport', sku: 'luggage-transfer:airport',
-        title: { it: 'LunArt ↔ aeroporto di Firenze', en: 'LunArt ↔ Florence airport' } },
+        title: { it: `${brand.name} ↔ aeroporto di Firenze`, en: `${brand.name} ↔ Florence airport` } },
       { id: 'comune',  sku: 'luggage-transfer:comune',
-        title: { it: 'LunArt ↔ altro indirizzo nel Comune di Firenze', en: 'LunArt ↔ another address in the Comune di Firenze' } },
+        title: { it: `${brand.name} ↔ altro indirizzo nel Comune di Firenze`, en: `${brand.name} ↔ another address in the Comune di Firenze` } },
     ],
     quantity: { min: 1, max: 2, step: 1, label: { it: 'Numero di tratte', en: 'Number of journeys' } },
     requiresDate: true,
@@ -515,8 +516,8 @@ export const PRODUCTS = [
       { id: 'romantic', sku: 'celebration:romantic',
         title: { it: 'Romantic Welcome', en: 'Romantic Welcome' },
         includes: {
-          it: ['Bouquet romantico', 'Biglietto LunArt scritto a mano', 'Allestimento semplice ed elegante', 'Una bottiglia a scelta', '2 calici e ghiaccio dove serve'],
-          en: ['Romantic bouquet', 'Handwritten LunArt card', 'A simple, elegant set-up', 'One bottle of your choice', '2 glasses and ice where it belongs'],
+          it: ['Bouquet romantico', `Biglietto ${brand.name} scritto a mano`, 'Allestimento semplice ed elegante', 'Una bottiglia a scelta', '2 calici e ghiaccio dove serve'],
+          en: ['Romantic bouquet', `Handwritten ${brand.name} card`, 'A simple, elegant set-up', 'One bottle of your choice', '2 glasses and ice where it belongs'],
         },
         allowedOptions: { bottle: ['prosecco-cuvee', 'rose-fermo', 'vermentino', 'chianti-barrique'] } },
       { id: 'signature', sku: 'celebration:signature',

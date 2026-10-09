@@ -49,6 +49,9 @@ export function verifyList() {
   for (const r of rooms) {
     if (r.verify) out.push({ kind: 'room', id: r.id, title: { it: `Camera ${r.number}`, en: `Room ${r.number}` }, ...r.verify });
   }
+  for (const c of contacts) {
+    if (c.verify) out.push({ kind: 'contact', id: c.id, title: { it: `Contatto: ${c.name}`, en: `Contact: ${c.name}` }, ...c.verify });
+  }
   for (const r of plannedRooms) {
     if (r.verify) out.push({ kind: 'room', id: r.id, title: { it: `Camera ${r.number} (non pubblicata)`, en: `Room ${r.number} (unpublished)` }, ...r.verify });
   }

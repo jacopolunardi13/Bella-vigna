@@ -9,8 +9,8 @@ export const departure = [
     priority: -20,
     title: { it: 'A che ora devo lasciare la camera', en: 'When to leave the room' },
     summary: {
-      it: 'Il check-out è entro le 11:00. Lascia la chiave in camera e avvisaci quando esci.',
-      en: 'Check-out is by 11:00 AM. Leave the key in the room and let us know when you go.',
+      it: 'L’orario di check-out te lo confermiamo prima dell’arrivo. Quando esci, avvisaci su WhatsApp.',
+      en: 'We confirm the check-out time before you arrive. When you leave, let us know on WhatsApp.',
     },
     detail: {
       it: 'Se ti serve un po’ più di tempo, chiedilo la sera prima: dipende da chi arriva dopo di te, ma spesso si trova una soluzione.\n\nI bagagli non devono condizionarti: si lasciano in deposito.',
@@ -18,6 +18,8 @@ export const departure = [
     },
     actions: [{ kind: 'entry', label: { it: 'Dove lascio i bagagli', en: 'Where to leave bags' }, value: 'luggage-late' }],
     intents: ['checkout'],
+    verify: { level: 'blocker', field: 'orario check-out',
+      note: 'Orario di check-out di Bella Vigna da confermare: non presumere le 11:00 di LunArt (Property Pack §4). La vecchia pagina diceva “entro le 11:00”: non confermato.' },
   },
   {
     id: 'luggage-late',
@@ -27,16 +29,15 @@ export const departure = [
     priority: -15,
     title: { it: 'Bagagli dopo il check-out', en: 'Bags after check-out' },
     summary: {
-      it: 'Lasciali gratis all’Opera Caffè in Piazza del Duomo e tieniti la giornata libera. Accanto a LunArt c’è anche un luggage store a pagamento.',
-      en: 'Leave them free of charge at Opera Caffè in Piazza del Duomo and keep your day free. There is also a paid luggage store next to LunArt.',
+      it: 'Lasciali gratis all’Opera Caffè in Piazza del Duomo, negli orari di apertura, e tieniti la giornata libera.',
+      en: 'Leave them free of charge at Opera Caffè in Piazza del Duomo, during opening hours, and keep your day free.',
     },
     detail: {
-      it: 'Il deposito all’Opera Caffè è gratuito negli orari di apertura, ed è lo stesso posto della colazione.\n\nSe invece preferisci non portarli tu, possiamo trasferirli: alla stazione, a un indirizzo in centro, in aeroporto o a un altro indirizzo nel Comune di Firenze. Si prenota entro mezzogiorno del giorno prima.',
-      en: 'Storage at Opera Caffè is free during opening hours, and it is the same place as breakfast.\n\nIf you would rather not carry them yourself, we can move them: to the station, to an address in the centre, to the airport, or to another address within the Comune di Firenze. Booked by noon the day before.',
+      it: 'È lo stesso locale della colazione. Avvisaci prima di passare, così sanno che sei nostro ospite.',
+      en: 'It is the same café as breakfast. Let us know before you drop by, so they know you are our guest.',
     },
     actions: [
       { kind: 'map', label: { it: 'Opera Caffè', en: 'Opera Caffè' }, value: 'https://maps.app.goo.gl/uok3CmvHBLmwieoV9' },
-      { kind: 'map', label: { it: 'Luggage store', en: 'Luggage store' }, value: 'https://maps.app.goo.gl/NGxTxK96jRVvErwU9' },
       { kind: 'product', label: { it: 'Trasferimento bagagli', en: 'Luggage transfer' }, value: 'luggage-transfer' },
     ],
     intents: ['luggage'],
@@ -53,8 +54,8 @@ export const departure = [
       en: 'In Florence taxis are not hailed in the street: you call one or use a rank. The numbers are 055 4390 and 055 4242.',
     },
     detail: {
-      it: 'Il posteggio più vicino è in Piazza Santa Trinita, a pochi minuti a piedi lungo il Lungarno.\n\nPer l’aeroporto vale la tariffa fissa comunale: chiedi conferma al conducente prima di partire.',
-      en: 'The nearest rank is in Piazza Santa Trinita, a few minutes’ walk along the Lungarno.\n\nFor the airport a fixed municipal fare applies: confirm it with the driver before you set off.',
+      it: 'Per l’aeroporto vale la tariffa fissa comunale: chiedi conferma al conducente prima di partire.',
+      en: 'For the airport a fixed municipal fare applies: confirm it with the driver before you set off.',
     },
     actions: [
       { kind: 'tel', label: { it: 'Chiama 055 4390', en: 'Call 055 4390' }, value: '+390554390' },
@@ -62,7 +63,7 @@ export const departure = [
     ],
     intents: ['taxi'],
     verify: { level: 'confirm',
-      note: 'I due numeri radiotaxi fiorentini e il posteggio di Santa Trinita non erano nella knowledge LunArt: sono informazioni pubbliche aggiunte qui. Da controllare una volta prima della pubblicazione.' },
+      note: 'Numeri radiotaxi fiorentini (informazione pubblica, già nella guida LunArt). Il posteggio più vicino a Via della Vigna Nuova non è indicato finché non è verificato.' },
   },
   {
     id: 'transfer',
@@ -72,18 +73,16 @@ export const departure = [
     priority: -5,
     title: { it: 'Transfer privato (NCC)', en: 'Private transfer' },
     summary: {
-      it: 'Organizziamo auto con conducente da e per l’aeroporto o la stazione, e gite in Toscana. Serve preavviso di almeno 24 ore.',
-      en: 'We arrange a car with driver to and from the airport or station, and trips across Tuscany. At least 24 hours’ notice is needed.',
-    },
-    detail: {
-      it: 'Il preventivo arriva prima della conferma, e il pagamento è anticipato. Non siamo un’agenzia: è un servizio che organizziamo per i nostri ospiti quando serve.',
-      en: 'You get a quote before confirming, and payment is in advance. We are not a travel agency: it is something we arrange for our guests when it helps.',
+      it: 'Un’auto con conducente da e per l’aeroporto: è un servizio in preparazione per Bella Vigna. Dalla guida vedi come funziona; per ora chiedicelo con almeno 24 ore di anticipo.',
+      en: 'A car with driver to and from the airport: a service being prepared for Bella Vigna. The guide shows how it works; for now, ask us at least 24 hours ahead.',
     },
     actions: [
-      { kind: 'product', label: { it: 'Prenota il transfer', en: 'Book the transfer' }, value: 'transfer-airport' },
-      { kind: 'entry', label: { it: 'Oppure scrivici', en: 'Or message us' }, value: 'contacts' },
+      { kind: 'product', label: { it: 'Vedi il transfer', en: 'See the transfer' }, value: 'transfer-airport' },
+      { kind: 'entry', label: { it: 'Chiedicelo', en: 'Ask us' }, value: 'contacts' },
     ],
     intents: ['transfer'],
+    verify: { level: 'blocker', field: 'servizio attivo',
+      note: 'Transfer NCC e trasferimento bagagli: catalogo LunArt, da validare per Bella Vigna (fornitore, tariffe, cutoff, cancellazione) prima di renderli acquistabili.' },
   },
   {
     id: 'to-airport',
@@ -93,10 +92,10 @@ export const departure = [
     priority: 0,
     title: { it: 'Andare in aeroporto', en: 'Getting to the airport' },
     summary: {
-      it: 'Taxi a tariffa fissa, oppure tramvia T2 da Santa Maria Novella. Con un volo molto presto, meglio un NCC prenotato prima.',
-      en: 'A fixed-fare taxi, or tram T2 from Santa Maria Novella. For a very early flight, a pre-booked private driver is the safer bet.',
+      it: 'Taxi a tariffa fissa, oppure tramvia T2 da Santa Maria Novella. Con un volo molto presto, organizzati il giorno prima.',
+      en: 'A fixed-fare taxi, or tram T2 from Santa Maria Novella. For a very early flight, arrange it the day before.',
     },
-    actions: [{ kind: 'entry', label: { it: 'Prenota un NCC', en: 'Book a driver' }, value: 'transfer' }],
+    actions: [{ kind: 'entry', label: { it: 'Chiamare un taxi', en: 'Call a taxi' }, value: 'taxi' }],
     intents: ['to-airport'],
   },
   {
@@ -107,12 +106,12 @@ export const departure = [
     priority: 2,
     title: { it: 'Andare alla stazione', en: 'Getting to the station' },
     summary: {
-      it: 'Santa Maria Novella è a circa quindici minuti a piedi lungo l’Arno. Con i bagagli, meglio un taxi.',
-      en: 'Santa Maria Novella is about a fifteen-minute walk along the Arno. With luggage, take a taxi.',
+      it: 'Santa Maria Novella è a circa dieci minuti a piedi. Con i bagagli, meglio un taxi.',
+      en: 'Santa Maria Novella is about ten minutes on foot. With luggage, take a taxi.',
     },
     actions: [
       { kind: 'map', label: { it: 'Percorso a piedi', en: 'Walking route' },
-        value: 'https://www.google.com/maps/dir/?api=1&origin=Vicolo+del+Canneto+2+Firenze&destination=Firenze+Santa+Maria+Novella&travelmode=walking' },
+        value: 'https://www.google.com/maps/dir/?api=1&origin=Via+della+Vigna+Nuova+8+Firenze&destination=Firenze+Santa+Maria+Novella&travelmode=walking' },
     ],
     intents: ['to-station'],
   },

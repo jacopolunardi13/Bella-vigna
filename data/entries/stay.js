@@ -1,13 +1,11 @@
 /**
  * Life inside the room.
  *
- * Two claims from the old site are gone on purpose. "Camere 302, 303 e 305 le più
- * tranquille (cortile interno)" contradicted every room description, which places
- * all of them over the street and the Arno — so the noise entry now says what is
- * actually true. And "Bambini benvenuti / età minima 18 anni" was self-contradictory;
- * the operational rule is now explicit: families are welcome, 0–2 can share the
- * parents' bed, a cot is an extra paid service, and an additional bed is charged
- * only when a two-person Superior booking asks for a separate extra bed.
+ * Only what the Property Pack states is stated as fact. LunArt's entries on the
+ * heated towel rail, the climate sensors, the welcome prosecco and the linen
+ * rhythm describe LunArt's rooms and are deliberately not carried over: a guest
+ * at Bella Vigna looking for a grey cap on a towel rail that does not exist would
+ * be the guide being wrong in the most visible way.
  */
 
 export const stay = [
@@ -19,51 +17,27 @@ export const stay = [
     priority: -20,
     title: { it: 'Wi-Fi', en: 'Wi-Fi' },
     summary: {
-      it: 'La rete è LunArt-Guest ed è gratuita in tutte le camere.',
-      en: 'The network is LunArt-Guest and it is free in every room.',
+      it: 'Inquadra con la fotocamera il codice QR che trovi in camera: il telefono si collega da solo. La rete è WINDTRE-96F14E.',
+      en: 'Point your camera at the QR code in your room: your phone joins by itself. The network is WINDTRE-96F14E.',
+    },
+    detail: {
+      it: 'Se il telefono non legge il QR, scrivici su WhatsApp e ti aiutiamo a collegarti.',
+      en: 'If your phone will not read the QR code, message us on WhatsApp and we will get you connected.',
     },
     facts: [
-      { label: { it: 'Rete', en: 'Network' }, value: 'LunArt-Guest', mono: true, copy: true },
-      { label: 'Password', value: 'LOPERACAFFE62R', mono: true, copy: true },
+      { label: { it: 'Rete', en: 'Network' }, value: 'WINDTRE-96F14E', mono: true, copy: true },
+      { label: { it: 'Come collegarsi', en: 'How to join' }, value: { it: 'QR code in camera', en: 'QR code in the room' } },
     ],
+    /**
+     * The password is never written here. When the operator configures it
+     * (`WIFI_PASSWORD`, see `.env.example`) the server adds it to this entry on a
+     * guest's own link, during their stay, and nowhere else.
+     */
+    privateFact: 'wifi-password',
+    actions: [{ kind: 'entry', label: { it: 'Il QR non funziona', en: 'The QR code won’t scan' }, value: 'contacts' }],
     intents: ['wifi'],
     verify: { level: 'confirm',
-      note: 'Rete e password vengono dalla knowledge storica. Da confermare che siano ancora quelle attive: è il primo dato che un ospite usa.' },
-  },
-  {
-    id: 'climate',
-    section: 'stay',
-    phase: ['staying'],
-    icon: 'thermometer',
-    priority: -6,
-    title: { it: 'Clima e riscaldamento', en: 'Climate control' },
-    summary: {
-      it: 'Ogni camera ha aria condizionata e riscaldamento. Dopo l’accensione passano circa due minuti prima che l’aria parta: è normale, non è guasto.',
-      en: 'Every room has air conditioning and heating. After you switch it on it takes about two minutes for air to start moving: that is normal, not a fault.',
-    },
-    detail: {
-      it: 'La camera ha sensori per non sprecare energia, e spiegano quasi tutti i “non funziona”:\n\n— se apri una finestra o la porta, clima e riscaldamento si spengono;\n— se esci e la porta si richiude senza che venga rilevata presenza, il sistema si spegne da solo.\n\nIn entrambi i casi basta richiudere, rientrare e riaccendere normalmente.',
-      en: 'The room has energy-saving sensors, and they explain nearly every “it isn’t working”:\n\n— open a window or the door and the climate system switches off;\n— leave, and once the door closes with nobody detected, it switches itself off.\n\nEither way, close up, come back in and switch it on again as normal.',
-    },
-    intents: ['climate'],
-  },
-  {
-    id: 'towel-rail',
-    section: 'stay',
-    phase: ['staying'],
-    icon: 'towel',
-    priority: 2,
-    title: { it: 'Scaldasalviette', en: 'Heated towel rail' },
-    summary: {
-      it: 'Il pannello touch è sotto il cappuccio grigio. Tieni il + per 3–5 secondi: diventa caldo in una decina di minuti.',
-      en: 'The touch panel sits under the grey cap. Hold + for 3–5 seconds: it warms up in about ten minutes.',
-    },
-    detail: {
-      it: 'Se non parte: stacca la spina per un minuto, riattacca, tieni premuto il − per 5 secondi e poi il +.\n\nSe dopo questo resta freddo, scrivici e veniamo a vederlo.',
-      en: 'If it does not start: unplug it for a minute, plug it back in, hold − for 5 seconds and then +.\n\nIf it is still cold after that, message us and we will come and look at it.',
-    },
-    actions: [{ kind: 'entry', label: { it: 'Resta freddo', en: 'Still cold' }, value: 'room-problem' }],
-    intents: ['towel-rail'],
+      note: 'SSID e collegamento via QR confermati dall’operatore. Verificare il QR fisico in tutte e tre le camere prima del go-live. Password: solo nella configurazione riservata (WIFI_PASSWORD), mai nel repository.' },
   },
   {
     id: 'amenities',
@@ -73,27 +47,37 @@ export const stay = [
     priority: -4,
     title: { it: 'Cosa trovi in camera', en: 'What’s in the room' },
     summary: {
-      it: 'Bagno privato, clima, Smart TV con le tue app di streaming, macchina Nespresso con capsule di cortesia, bollitore con tè e caffè, mini-frigo, cassaforte e kit di benvenuto.',
-      en: 'Private bathroom, climate control, a Smart TV with your own streaming apps, a Nespresso machine with complimentary capsules, a kettle with tea and coffee, a mini-fridge, a safe and a welcome kit.',
-    },
-    detail: {
-      it: 'Il bagno ha doccia, bidet, pantofole e le amenities. Nel kit trovi anche i tappi per le orecchie, che in centro a volte servono. Gli accappatoi non sono previsti.\n\nSulla Smart TV puoi accedere ai tuoi account di streaming: ricordati di uscire dalle app prima di partire.',
-      en: 'The bathroom has a shower, a bidet, slippers and the usual toiletries. The kit includes earplugs, which the city centre occasionally calls for. Bathrobes are not provided.\n\nYou can sign in to your own streaming accounts on the Smart TV: remember to sign out again before you leave.',
+      it: 'Bagno privato, aria condizionata, Wi-Fi, macchina Nespresso con caffè e tè e i prodotti da bagno. Nella camera con terrazza c’è anche il frigobar.',
+      en: 'A private bathroom, air conditioning, Wi-Fi, a Nespresso machine with coffee and tea, and toiletries. The terrace room also has a minibar.',
     },
     intents: ['amenities'],
   },
   {
-    id: 'welcome',
+    id: 'climate',
     section: 'stay',
     phase: ['staying'],
-    icon: 'glass',
-    priority: 6,
-    title: { it: 'Il benvenuto', en: 'Your welcome' },
+    icon: 'thermometer',
+    priority: -6,
+    title: { it: 'Aria condizionata', en: 'Air conditioning' },
     summary: {
-      it: 'All’arrivo trovi un prosecco di benvenuto e acqua fresca.',
-      en: 'A welcome prosecco and chilled water are waiting when you arrive.',
+      it: 'Ogni camera ha l’aria condizionata. Se qualcosa non va, scrivici: veniamo a vedere.',
+      en: 'Every room has air conditioning. If something is not right, message us: we will come and look.',
     },
-    intents: ['welcome'],
+    actions: [{ kind: 'entry', label: { it: 'Non funziona', en: 'It isn’t working' }, value: 'room-problem' }],
+    intents: ['climate'],
+  },
+  {
+    id: 'terrace',
+    section: 'stay',
+    phase: ['before', 'staying'],
+    icon: 'leaf',
+    priority: 1,
+    title: { it: 'La terrazza e la vite', en: 'The terrace and the vine' },
+    summary: {
+      it: 'La camera Doppia/Tripla ha una terrazza privata con un salottino tra le piante e la vite che ha dato il nome alla casa.',
+      en: 'The Double/Triple room has a private terrace with a small lounge among the plants, and the vine the house is named after.',
+    },
+    intents: ['terrace'],
   },
   {
     id: 'cleaning',
@@ -101,19 +85,15 @@ export const stay = [
     phase: ['staying'],
     icon: 'broom',
     priority: 3,
-    title: { it: 'Pulizia e biancheria', en: 'Cleaning and linen' },
+    title: { it: 'Pulizia, teli e biancheria', en: 'Cleaning, towels and linen' },
     summary: {
-      it: 'Sono due cose diverse: la camera viene riordinata e pulita ogni giorno, mentre teli e biancheria si cambiano ogni tre giorni — o prima, se ce lo chiedi.',
-      en: 'Two different things: the room is tidied and cleaned every day, while towels and linen are changed every three days — or sooner, if you ask.',
+      it: 'Se ti serve qualcosa per la camera — teli puliti, un riordino, un cuscino in più — scrivici e ce ne occupiamo.',
+      en: 'If you need anything for the room — fresh towels, a tidy-up, an extra pillow — message us and we will see to it.',
     },
-    detail: {
-      it: 'Ogni lavaggio consuma acqua ed energia, perciò il cambio non è automatico tutti i giorni — ma basta dirlo.\n\nSe ti servono teli in più: 5 € al pezzo, oppure 15 € per un set completo (due grandi, due medi e il tappetino).',
-      en: 'Every wash uses water and energy, so linen is not changed automatically each day — but you only have to ask.\n\nIf you need extra towels: €5 each, or €15 for a full set (two large, two medium and a bath mat).',
-    },
-    actions: [{ kind: 'entry', label: { it: 'Chiedi un cambio', en: 'Ask for a change' }, value: 'contacts' }],
+    actions: [{ kind: 'entry', label: { it: 'Chiedi', en: 'Ask us' }, value: 'contacts' }],
     intents: ['cleaning', 'towels'],
-    verify: { level: 'confirm', field: 'prezzi teli extra',
-      note: 'Pulizia quotidiana e cambio biancheria ogni 3 giorni sono confermati come servizi distinti. Resta da confermare che i teli extra costino ancora 5 € al pezzo e 15 € il set.' },
+    verify: { level: 'confirm', field: 'pulizia quotidiana',
+      note: 'I testi parlano di pulizia quotidiana: da confermare prima di prometterla (Property Pack §5, §11). Fino ad allora la guida non fissa una frequenza.' },
   },
   {
     id: 'accessibility',
@@ -123,15 +103,13 @@ export const stay = [
     priority: 7,
     title: { it: 'Scale, ascensore e dislivelli', en: 'Steps, lift and thresholds' },
     summary: {
-      it: 'Dall’ingresso si salgono circa sei gradini per raggiungere l’ascensore, che arriva al terzo piano. All’ingresso di alcune camere, bagni o docce possono esserci piccoli dislivelli.',
-      en: 'About six steps lead from the entrance to the lift, which serves the third floor. Some rooms, bathrooms and showers have small thresholds at the door.',
-    },
-    detail: {
-      it: 'Se hai difficoltà motorie, o viaggi con un passeggino o bagagli pesanti, dicci qualcosa prima di arrivare: ti spieghiamo cosa aspettarti e, dove possiamo, ti diamo una mano.',
-      en: 'If you have limited mobility, or are travelling with a pushchair or heavy luggage, tell us before you arrive: we will explain what to expect and help where we can.',
+      it: 'Se hai difficoltà motorie, o viaggi con un passeggino o bagagli pesanti, scrivici prima di arrivare: ti diciamo esattamente cosa aspettarti.',
+      en: 'If you have limited mobility, or are travelling with a pushchair or heavy luggage, message us before you arrive: we will tell you exactly what to expect.',
     },
     actions: [{ kind: 'entry', label: { it: 'Chiedici com’è', en: 'Ask us about access' }, value: 'contacts' }],
     intents: ['accessibility'],
+    verify: { level: 'confirm',
+      note: 'Piano, ascensore e gradini non sono documentati: aggiungerli qui appena confermati, così l’ospite non deve chiedere.' },
   },
   {
     id: 'noise',
@@ -141,8 +119,8 @@ export const stay = [
     priority: 9,
     title: { it: 'Rumore', en: 'Noise' },
     summary: {
-      it: 'Le camere affacciano sul Lungarno e sul vicolo: è il centro di Firenze, qualche rumore di città arriva. Se ti dà fastidio dillo, vediamo cosa si può fare.',
-      en: 'The rooms face the Lungarno and the lane: this is central Florence, so some city noise reaches you. If it bothers you, say so and we will see what we can do.',
+      it: 'Siamo nel centro di Firenze, e qualche rumore di città arriva. Se ti dà fastidio dillo, vediamo cosa si può fare.',
+      en: 'This is central Florence, so some city noise reaches you. If it bothers you, say so and we will see what we can do.',
     },
     intents: ['noise'],
   },
@@ -158,6 +136,7 @@ export const stay = [
       en: 'Smoking is not allowed in the rooms, bathrooms included.',
     },
     intents: ['smoking'],
+    verify: { level: 'confirm', note: 'Dalla vecchia pagina (“Non fumatori”). Confermare, e decidere cosa vale sulla terrazza.' },
   },
   {
     id: 'pets',
@@ -172,6 +151,7 @@ export const stay = [
     },
     actions: [{ kind: 'entry', label: { it: 'Chiedi', en: 'Ask us' }, value: 'contacts' }],
     intents: ['pets'],
+    verify: { level: 'confirm', note: 'Dalla vecchia pagina (“Animali previo accordo”). Confermare.' },
   },
   {
     id: 'children',
@@ -179,17 +159,15 @@ export const stay = [
     phase: ['before', 'staying'],
     icon: 'child',
     priority: 10,
-    title: { it: 'Bambini, culle e terzo letto', en: 'Children, cots and a third bed' },
+    title: { it: 'Bambini e letto aggiuntivo', en: 'Children and an extra bed' },
     summary: {
-      it: 'Le famiglie sono benvenute. Fino a 2 anni i bambini possono dormire gratuitamente nel letto con i genitori; se serve una culla, è un servizio extra a pagamento da richiedere in anticipo.',
-      en: 'Families are welcome. Up to age 2, children may share their parents’ bed free of charge; if a cot is needed, it is a paid extra service that should be requested in advance.',
+      it: 'Le famiglie sono benvenute. Culle, letti aggiuntivi e quante persone può ospitare ogni camera dipendono dalla camera: scrivici prima di arrivare e ti diciamo cosa è possibile.',
+      en: 'Families are welcome. Cots, extra beds and how many people each room can sleep depend on the room: message us before you arrive and we will tell you what is possible.',
     },
-    detail: {
-      it: 'Dai 3 anni serve un posto letto. Le camere 303 e 305, entrambe Superior, sono le camere normalmente utilizzate come triple.\n\nSe la prenotazione è per 3 persone, il terzo letto è già compreso nella tariffa. Se invece una Superior 303 o 305 è prenotata per 2 persone e gli ospiti chiedono di dormire separatamente aggiungendo un terzo letto, il letto extra è a pagamento con supplemento di 30 € a notte.',
-      en: 'From age 3, a separate bed is required. Rooms 303 and 305, both Superior, are the rooms normally used as triples.\n\nIf the booking is for 3 guests, the third bed is already included in the rate. If instead Superior room 303 or 305 is booked for 2 guests and they ask to sleep separately by adding a third bed, that extra bed is charged at €30 per night.',
-    },
-    actions: [{ kind: 'entry', label: { it: 'Richiedi una culla', en: 'Request a cot' }, value: 'contacts' }],
+    actions: [{ kind: 'entry', label: { it: 'Chiedi', en: 'Ask us' }, value: 'contacts' }],
     intents: ['children'],
+    verify: { level: 'blocker', field: 'capienze e letti',
+      note: 'Capienza delle tre camere, culla e letto aggiuntivo (con eventuale costo) da confermare. La regola LunArt (culla a pagamento, terzo letto 30 €) NON va trasferita senza conferma.' },
   },
   {
     id: 'hair-in-room',
@@ -199,15 +177,17 @@ export const stay = [
     priority: 8,
     title: { it: 'Parrucchiere e barbiere in camera', en: 'Hairdresser and barber in your room' },
     summary: {
-      it: 'Taglio, barba o piega nella tua camera, da un professionista che viene da te. Si prenota dalla guida, scegliendo giorno e ora.',
-      en: 'A cut, a beard or a blow-dry in your own room, from a professional who comes to you. Booked from the guide, picking a day and a time.',
+      it: 'Taglio, barba o piega nella tua camera, da un professionista che viene da te. Dalla guida vedi i servizi; la prenotazione si apre quando il servizio è attivo per Bella Vigna.',
+      en: 'A cut, a beard or a blow-dry in your own room, from a professional who comes to you. The guide shows the services; booking opens once the service is live at Bella Vigna.',
     },
     detail: {
-      it: 'Gli orari che vedi sono quelli realmente liberi: se un giorno non compare, quel giorno non c’è.\n\nNon è previsto il lavaggio: vieni con i capelli già lavati dove il servizio lo richiede. Colore e colpi di sole al momento non li facciamo.',
-      en: 'The times you see are the ones actually free: if a day is not there, it is not available.\n\nThere is no wash service: come with your hair already washed where the service needs it. Colour and highlights are not something we do at the moment.',
+      it: 'Gli orari proposti sono solo quelli realmente liberi. Non è previsto il lavaggio, e colore e colpi di sole al momento non si fanno.',
+      en: 'The only times offered are the ones actually free. There is no wash service, and colour and highlights are not offered at the moment.',
     },
-    actions: [{ kind: 'product', label: { it: 'Prenota il servizio', en: 'Book the service' }, value: 'hair-service' }],
+    actions: [{ kind: 'product', label: { it: 'Vedi il servizio', en: 'See the service' }, value: 'hair-service' }],
     intents: ['hair'],
+    verify: { level: 'blocker', field: 'servizio attivo',
+      note: 'Servizio del catalogo LunArt (Property Pack §8). Prezzi, professionista, orari e copertura per Bella Vigna da validare: fino ad allora i prezzi sono “placeholder” e la produzione non vende.' },
   },
   {
     id: 'celebration-in-room',
@@ -217,15 +197,16 @@ export const stay = [
     priority: 13,
     title: { it: 'Compleanni, anniversari, proposte', en: 'Birthdays, anniversaries, proposals' },
     summary: {
-      it: 'Prepariamo la camera prima che rientriate: fiori, una bottiglia, un biglietto scritto a mano. Si ordina entro mezzogiorno del giorno prima.',
-      en: 'We set the room up before you come back: flowers, a bottle, a handwritten card. Ordered by noon the day before.',
+      it: 'Fiori, una bottiglia, un biglietto scritto a mano: allestimenti della camera per un’occasione. Dalla guida vedi cosa comprendono; la prenotazione si apre quando il servizio è attivo per Bella Vigna.',
+      en: 'Flowers, a bottle, a handwritten card: the room set up for an occasion. The guide shows what each includes; booking opens once the service is live at Bella Vigna.',
     },
-    detail: {
-      it: 'Tre allestimenti, dal più semplice al più scenografico. Possiamo farlo trovare pronto all’arrivo o durante il soggiorno, all’ora che indicate.\n\nNiente candele a fiamma viva e niente petali sul letto: usiamo luci e candele LED dove servono, e la camera resta pulita e ordinata.',
-      en: 'Three set-ups, from the simplest to the most theatrical. We can have it ready when you arrive, or during the stay at the time you choose.\n\nNo open-flame candles and no petals on the bed: we use LED candles and lights where they belong, and the room stays clean and uncluttered.',
-    },
-    actions: [{ kind: 'product', label: { it: 'Vedi gli allestimenti', en: 'See the set-ups' }, value: 'celebration' }],
+    actions: [
+      { kind: 'product', label: { it: 'Vedi gli allestimenti', en: 'See the set-ups' }, value: 'celebration' },
+      { kind: 'entry', label: { it: 'Oppure scrivici', en: 'Or message us' }, value: 'contacts' },
+    ],
     intents: ['celebration'],
+    verify: { level: 'blocker', field: 'servizio attivo',
+      note: 'Allestimenti del catalogo LunArt: contenuti, prezzi e fornitore per Bella Vigna da validare prima della vendita.' },
   },
   {
     id: 'water',

@@ -1,5 +1,5 @@
 /* ===========================================================================
-   LunArt — Guest Guide
+   Bella Vigna — Guest Guide (LunArt core stylesheet, Bella Vigna palette)
    ---------------------------------------------------------------------------
    Mobile-first throughout: the base rules describe a phone, and the only media
    queries add room as the screen grows. Nothing is overridden with `!important`.
@@ -12,12 +12,12 @@
 
 /* --- Tokens --------------------------------------------------------------- */
 :root {
-  --ink: #1a1a1a;
+  --ink: #1c1810;
   /* Text greys are set by contrast, not by eye. Against the three surfaces used
      here (#faf9f7, #f2ede6, #fff) anything below 0.64 alpha falls short of 4.5:1,
      so the old 0.4 labels and 0.55 summaries did not pass. Hierarchy comes from
      size, case and letter-spacing instead, which costs nothing in legibility. */
-  --ink-strong: rgba(26, 26, 26, 0.76);  /*  7.7:1  prose */
+  --ink-strong: rgba(28, 24, 16, 0.76);  /*  7.7:1  prose */
 
   /*
    * The ink the cards are set in — the Pass, the Privilege Pass and the card a venue
@@ -46,17 +46,24 @@
    */
   --pass-wash-top: linear-gradient(to bottom, rgba(250, 247, 239, .62) 0%, rgba(250, 247, 239, .5) 30%, rgba(250, 247, 239, 0) 56%);
   --pass-wash-bottom: linear-gradient(to top, rgba(250, 247, 239, .8) 0%, rgba(250, 247, 239, .68) 24%, rgba(250, 247, 239, 0) 40%);
-  --ink-soft:   rgba(26, 26, 26, 0.68);  /*  5.8:1  summaries, secondary text */
-  --ink-quiet:  rgba(26, 26, 26, 0.64);  /*  5.1:1  eyebrows, labels, inactive tabs */
-  --ink-line:   rgba(26, 26, 26, 0.14);  /*  borders */
-  --ink-faint:  rgba(26, 26, 26, 0.07);  /*  hairlines */
-  --ink-ghost:  rgba(26, 26, 26, 0.22);  /*  decorative only: dots, grips */
+  --ink-soft:   rgba(28, 24, 16, 0.68);  /*  5.8:1  summaries, secondary text */
+  --ink-quiet:  rgba(28, 24, 16, 0.64);  /*  5.1:1  eyebrows, labels, inactive tabs */
+  --ink-line:   rgba(28, 24, 16, 0.14);  /*  borders */
+  --ink-faint:  rgba(28, 24, 16, 0.07);  /*  hairlines */
+  --ink-ghost:  rgba(28, 24, 16, 0.22);  /*  decorative only: dots, grips */
 
-  --paper: #faf9f7;
-  --paper-2: #f2ede6;
-  --paper-3: #e8e1d6;
-  --accent: #8a6a3d;
-  --accent-soft: #c9a86d;
+  /*
+   * Bella Vigna: warm paper and the gold of the house's own logo (#987028). The
+   * logo gold itself is 4.2:1 on this paper, short of AA for text, so the accent
+   * that text is set in is the same hue one step deeper — 5.5:1 on --paper and
+   * 4.95:1 on --paper-2 — and the logo colour is kept for what is not text.
+   */
+  --paper: #fbf8f2;
+  --paper-2: #f3ecdf;
+  --paper-3: #e9dfcc;
+  --accent: #80601f;
+  --accent-soft: #c4a35f;
+  --brand-gold: #987028;
   /**
    * The seal: a card that is not live yet, or no longer is.
    *
@@ -88,7 +95,7 @@
      the card itself once the file exists; `none` until then, and the card draws
      its own. */
   --pass-artwork: none;
-  --rule: rgba(26, 26, 26, 0.14);
+  --rule: rgba(28, 24, 16, 0.14);
   --surface-raised: #fff;
   --tap: 44px;           /* minimum comfortable touch target */
 
@@ -96,10 +103,10 @@
   /* The hero caption sits on a photograph. This scrim is the darkest the backdrop
      can be, so legibility holds even over a bright frame — see tools/qa.mjs,
      which checks the caption against this value composited over white. */
-  --hero-scrim: rgba(26, 26, 26, 0.78);
+  --hero-scrim: rgba(28, 24, 16, 0.78);
 
-  --shadow: 0 1px 2px rgba(26, 26, 26, 0.04), 0 8px 24px rgba(26, 26, 26, 0.06);
-  --shadow-lifted: 0 8px 40px rgba(26, 26, 26, 0.18);
+  --shadow: 0 1px 2px rgba(28, 24, 16, 0.04), 0 8px 24px rgba(28, 24, 16, 0.06);
+  --shadow-lifted: 0 8px 40px rgba(28, 24, 16, 0.18);
 
   --ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 }
@@ -181,7 +188,7 @@ h3 { font-size: var(--step-1); }
  *
  * Two states, and the markup is the same in both. By default it is the wordmark set
  * in the house serif — LunArt's identity is typographic, so this is a rendering of
- * the mark and not a stand-in for one. When `assets/img/brand/lunart-wordmark.svg`
+ * the mark and not a stand-in for one. When the property’s mark (`brand.mark`)
  * exists, `src/ui/brand.js` replaces the text with it and sets `data-logo`; see the
  * README in that folder for what the file has to be.
  *
@@ -247,7 +254,7 @@ h3 { font-size: var(--step-1); }
 .welcome__frame img { width: 100%; height: 100%; object-fit: cover; }
 .welcome__frame::after {
   content: ""; position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(26, 26, 26, 0) 30%, var(--hero-scrim) 100%);
+  background: linear-gradient(180deg, rgba(28, 24, 16, 0) 30%, var(--hero-scrim) 100%);
 }
 .welcome__caption {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 1;
@@ -372,7 +379,7 @@ h3 { font-size: var(--step-1); }
 /* --- Bottom sheet --------------------------------------------------------- */
 .scrim {
   position: fixed; inset: 0; z-index: 40;
-  background: rgba(26, 26, 26, 0.45);
+  background: rgba(28, 24, 16, 0.45);
   opacity: 0; transition: opacity 0.22s var(--ease);
 }
 .scrim[data-open="true"] { opacity: 1; }
@@ -829,8 +836,8 @@ fieldset.field { border: 0; padding: 0; }
 .privilege-card::before {
   content: ""; position: absolute; inset: 0;
   background-image: image-set(
-    url("../img/pass/lunart-opera-700.webp") 1x,
-    url("../img/pass/lunart-opera-1024.webp") 2x);
+    url("../img/pass/bella-vigna-pass-700.webp") 1x,
+    url("../img/pass/bella-vigna-pass-1024.webp") 2x);
   background-size: cover; background-position: 50% 0%;
 }
 .privilege-card::after {
@@ -1069,7 +1076,7 @@ fieldset.field { border: 0; padding: 0; }
 .feature__frame img { width: 100%; height: 100%; object-fit: cover; }
 .feature::after {
   content: ""; position: absolute; inset: 0;
-  background: linear-gradient(180deg, rgba(26, 26, 26, 0) 35%, var(--hero-scrim) 100%);
+  background: linear-gradient(180deg, rgba(28, 24, 16, 0) 35%, var(--hero-scrim) 100%);
 }
 .feature__caption {
   position: absolute; left: 0; right: 0; bottom: 0; z-index: 1;
@@ -1173,8 +1180,8 @@ fieldset.field { border: 0; padding: 0; }
   content: "";
   position: absolute; inset: 0;
   background-image: image-set(
-    url("../img/pass/lunart-opera-700.webp") 1x,
-    url("../img/pass/lunart-opera-1024.webp") 2x);
+    url("../img/pass/bella-vigna-pass-700.webp") 1x,
+    url("../img/pass/bella-vigna-pass-1024.webp") 2x);
   /*
    * Anchored to the top edge, which is where the air is.
    *

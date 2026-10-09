@@ -70,8 +70,10 @@ for (const src of sources(SRC)) {
   const srcWidth = Number(run('identify', ['-format', '%w', src]).toString().trim());
 
   for (const w of WIDTHS) {
-    // Never upscale: a 1024px source has no business pretending to be wider.
-    if (w > srcWidth && w !== Math.min(...WIDTHS.filter((x) => x >= srcWidth))) continue;
+    // Never upscale, and never leave a hole: `picture()` always asks for all three
+    // widths, and a missing file on this server answers 200 with the guide's HTML,
+    // which a browser on a wide screen would try to draw as a photograph. A source
+    // narrower than a width is written at its own size under that width's name.
     const target = Math.min(w, srcWidth);
     const out = join(outDir, `${name}-${w}.webp`);
     if (existsSync(out)) { skipped++; bytes += statSync(out).size; continue; }

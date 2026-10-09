@@ -1,4 +1,11 @@
-/** When something is wrong, or a guest just needs a person. */
+/**
+ * When something is wrong, or a guest just needs a person.
+ *
+ * The WhatsApp line is LunArt's own WhatsApp Business account (operator's
+ * decision). The guide is honest about that: it says the line is shared, every
+ * link to it opens a message that already names Bella Vigna, and the management
+ * telephone stays a separate, distinct channel.
+ */
 
 export const help = [
   {
@@ -9,24 +16,26 @@ export const help = [
     priority: -20,
     title: { it: 'Parlare con qualcuno', en: 'Talk to someone' },
     summary: {
-      it: 'Scrivici su WhatsApp al +39 392 566 1488: è il modo più veloce. Se preferisci parlare, chiama Diego al +39 334 211 5505.',
-      en: 'Message us on WhatsApp at +39 392 566 1488 — that is the fastest. If you would rather talk, call Diego on +39 334 211 5505.',
+      it: 'Scrivici su WhatsApp al +39 392 566 1488: è il modo più veloce. Per parlare con qualcuno al telefono c’è Diego, al +39 334 211 5505.',
+      en: 'Message us on WhatsApp at +39 392 566 1488 — that is the fastest. To speak to someone by phone, call Diego on +39 334 211 5505.',
     },
     detail: {
-      it: 'Il WhatsApp è quello ufficiale di LunArt e lo leggiamo anche quando non possiamo rispondere al telefono. È una linea solo per messaggi: per una telefonata c’è il numero di Diego.',
-      en: 'The WhatsApp line is LunArt’s own, and we read it even when we cannot pick up the phone. It takes messages only: to actually speak to somebody, use Diego’s number.',
+      it: 'Il WhatsApp è la linea ufficiale che Bella Vigna condivide con LunArt, la struttura sorella con la stessa gestione: per questo nel profilo potresti vedere il nome LunArt. Scrivi sempre che sei ospite di Bella Vigna — i pulsanti di questa guida lo fanno già per te. È una linea solo per messaggi: per una telefonata c’è Diego.\n\nPer prenotazioni, fatture e casi particolari c’è la direzione: Valentina, al +39 329 686 0909.',
+      en: 'The WhatsApp line is the official one Bella Vigna shares with LunArt, its sister property under the same management: that is why the profile may show the LunArt name. Always say you are a Bella Vigna guest — the buttons in this guide already do it for you. The line takes messages only: to actually speak to somebody, call Diego.\n\nFor bookings, invoices and anything out of the ordinary there is the management: Valentina, on +39 329 686 0909.',
     },
     facts: [
-      { label: { it: 'WhatsApp LunArt', en: 'LunArt on WhatsApp' }, value: '+39 392 566 1488', mono: true, copy: true },
+      { label: { it: 'WhatsApp (linea condivisa)', en: 'WhatsApp (shared line)' }, value: '+39 392 566 1488', mono: true, copy: true },
       { label: { it: 'Diego, al telefono', en: 'Diego, by phone' }, value: '+39 334 211 5505', mono: true, copy: true },
-      { label: { it: 'Email', en: 'Email' }, value: 'lunartfirenze@gmail.com', copy: true },
+      { label: { it: 'Direzione — Valentina', en: 'Management — Valentina' }, value: '+39 329 686 0909', mono: true, copy: true },
     ],
     actions: [
       { kind: 'whatsapp', label: { it: 'Scrivici su WhatsApp', en: 'Message us on WhatsApp' }, value: '+393925661488' },
       { kind: 'tel', label: { it: 'Chiama Diego', en: 'Call Diego' }, value: '+393342115505' },
-      { kind: 'mailto', label: { it: 'Manda una mail', en: 'Send an email' }, value: 'lunartfirenze@gmail.com' },
+      { kind: 'tel', label: { it: 'Chiama la direzione', en: 'Call the management' }, value: '+393296860909' },
     ],
     intents: ['contacts'],
+    verify: { level: 'blocker', field: 'canale WhatsApp condiviso',
+      note: 'Verificare sul numero WhatsApp Business condiviso (Property Pack §7, §11): instradamento delle richieste Bella Vigna, nome e foto del profilo che l’ospite vede, risposte rapide che nominano la struttura giusta. Il testo dice “potresti vedere il nome LunArt”: correggerlo se il profilo verrà reso neutro.' },
   },
   {
     id: 'room-problem',
@@ -36,13 +45,8 @@ export const help = [
     priority: -10,
     title: { it: 'Qualcosa non funziona in camera', en: 'Something is not working' },
     summary: {
-      it: 'Scrivici su WhatsApp dicendo il numero della camera e cosa succede. Le cose piccole si risolvono quasi sempre in giornata.',
-      en: 'Message us on WhatsApp with your room number and what is happening. Small things are almost always sorted the same day.',
-    },
-
-    detail: {
-      it: 'Prima di scrivere, due controlli che risolvono la metà dei casi:\n\n— clima spento? Guarda se una finestra è aperta: i sensori lo spengono.\n— scaldasalviette freddo? Tieni il + per 3–5 secondi.\n\nSe non è questo, scrivici e basta: ci pensiamo noi.',
-      en: 'Before you write, two checks that solve half the cases:\n\n— climate off? See whether a window is open: the sensors switch it off.\n— towel rail cold? Hold + for 3–5 seconds.\n\nIf it is neither, just message us: we will take it from there.',
+      it: 'Scrivici su WhatsApp dicendo che sei ospite di Bella Vigna, in quale camera, e cosa succede. Le cose piccole si risolvono quasi sempre in giornata.',
+      en: 'Message us on WhatsApp saying you are a Bella Vigna guest, which room, and what is happening. Small things are almost always sorted the same day.',
     },
     actions: [{ kind: 'whatsapp', label: { it: 'Scrivici su WhatsApp', en: 'Message us on WhatsApp' }, value: '+393925661488' }],
     intents: ['room-problem'],
@@ -72,7 +76,7 @@ export const help = [
     priority: 5,
     title: { it: 'Fattura', en: 'Invoice' },
     summary: {
-      it: 'Se ti serve fattura, dillo prima che venga emesso lo scontrino: dopo non si può più cambiare.',
+      it: 'Se ti serve la fattura, dillo prima che venga emessa la ricevuta: dopo non si può più cambiare.',
       en: 'If you need an invoice, say so before the receipt is issued: afterwards it cannot be changed.',
     },
     actions: [{ kind: 'entry', label: { it: 'Richiedila', en: 'Request one' }, value: 'contacts' }],
@@ -86,14 +90,16 @@ export const help = [
     priority: 8,
     title: { it: 'Pagamento, cancellazioni e cambio date', en: 'Payment, cancellations and changing dates' },
     summary: {
-      it: 'Il soggiorno non è liberamente rimborsabile. Possiamo però valutare un cambio data, se ce lo chiedi almeno due settimane prima e c’è disponibilità.',
-      en: 'The stay is not freely refundable. We can look at moving your dates, though, if you ask at least two weeks ahead and there is availability.',
+      it: 'Valgono le condizioni scritte nella conferma della tua prenotazione. Per un cambio date o un caso particolare, parlane con la direzione.',
+      en: 'The terms in your booking confirmation apply. To change dates or for any particular case, speak to the management.',
     },
     detail: {
-      it: 'Sul cambio data: se le nuove date costano più delle precedenti, la differenza si paga; se costano meno, la differenza non viene rimborsata.\n\nSe hai prenotato tramite un portale, valgono anche le condizioni del tuo contratto con loro, che possono essere diverse: in quel caso fa fede la tua conferma.\n\nPer le prenotazioni gestite a mano resta possibile il bonifico anticipato, con la camera bloccata per 24 ore in attesa della contabile.\n\nPer qualsiasi caso specifico, parlane direttamente con Jacopo: è l’unico modo di avere una risposta che vale.',
-      en: 'On moving dates: if the new dates cost more, the difference is payable; if they cost less, the difference is not refunded.\n\nIf you booked through a travel site, the terms of your contract with them also apply and may be different: in that case your own confirmation is what counts.\n\nFor manually handled bookings, advance bank transfer remains possible, with the room held for 24 hours pending proof of payment.\n\nFor any specific case, speak to Jacopo directly: it is the only way to get an answer that holds.',
+      it: 'Se hai prenotato tramite un portale, valgono le condizioni del tuo contratto con loro: fa fede la tua conferma.\n\nPer qualsiasi caso specifico, chiama Valentina, che segue la direzione: è il modo per avere una risposta che vale.',
+      en: 'If you booked through a travel site, the terms of your contract with them apply: your own confirmation is what counts.\n\nFor any specific case, call Valentina, who runs the management side: it is the way to get an answer that holds.',
     },
-    actions: [{ kind: 'entry', label: { it: 'Scrivi a Jacopo', en: 'Message Jacopo' }, value: 'contacts' }],
+    actions: [{ kind: 'tel', label: { it: 'Chiama la direzione', en: 'Call the management' }, value: '+393296860909' }],
     intents: ['booking-terms'],
+    verify: { level: 'confirm',
+      note: 'Le condizioni di LunArt (non rimborsabile, cambio date con 2 settimane) NON sono state trasferite. Se Bella Vigna ha una sua policy per le prenotazioni dirette, aggiungerla qui.' },
   },
 ];

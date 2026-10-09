@@ -63,6 +63,8 @@
  * rendered, never returned to a scanner, and have no page.
  */
 
+import { brand } from '../data/brand.js';
+
 /**
  * The entitlements a reservation can carry, by name.
  *
@@ -215,7 +217,14 @@ const activating = ({ id, name, category, address = null, area = null, notes = n
   ...(verify ? { verify } : {}),
 });
 
-export const PARTNERS = [
+/**
+ * The shared network, as LunArt agreed it.
+ *
+ * Same portfolio as LunArt, by the operator's decision (Property Pack §8). Each
+ * record still describes LunArt's own agreement; whether it holds for Bella Vigna
+ * guests is a separate fact, recorded in `PROPERTY_AGREEMENTS` below.
+ */
+export const NETWORK = [
   // ── Included with the stay ───────────────────────────────────────────────
   {
     partner_id: 'opera-caffe',
@@ -244,8 +253,8 @@ export const PARTNERS = [
         headline: { it: '30% sul menù al tavolo', en: '30% off table orders' },
         subline: { it: 'Incluso nel soggiorno', en: 'Included with your stay' },
         note: {
-          it: 'Dillo prima di ordinare e mostra la conferma di prenotazione LunArt. Vale sul menù al tavolo, per tutti gli ospiti della prenotazione.',
-          en: 'Say so before ordering and show your LunArt booking confirmation. It applies to table orders, for everyone on the reservation.',
+          it: `Dillo prima di ordinare e mostra la conferma di prenotazione ${brand.name}. Vale sul menù al tavolo, per tutti gli ospiti della prenotazione.`,
+          en: `Say so before ordering and show your ${brand.name} booking confirmation. It applies to table orders, for everyone on the reservation.`,
         },
       },
     ],
@@ -338,7 +347,7 @@ export const PARTNERS = [
         cap: { amount: 1500, per: 'person' },
         emphasis: '€15 MAX + DRINK',
         headline: { it: '€15 MAX + DRINK', en: '€15 MAX + DRINK' },
-        subline: { it: 'Tutta la notte · LunArt Privilege', en: 'All night · LunArt Privilege' },
+        subline: { it: `Tutta la notte · ${brand.privilegeName}`, en: `All night · ${brand.privilegeName}` },
         description: {
           it: 'Ingresso in lista a massimo €15 a persona, con una consumazione inclusa, a qualsiasi ora della serata.',
           en: 'Guest-list entry for no more than €15 per person, with one drink included, at any time of the night.',
@@ -504,11 +513,63 @@ export const PARTNERS = [
     eligibility: PRIVILEGE_ELIGIBILITY,
     benefits: [{
       benefit_id: 'example-beauty-rate', kind: 'special', value: null,
-      headline: { it: 'Prezzo dedicato agli ospiti LunArt', en: 'A price reserved for LunArt guests' },
+      headline: { it: `Prezzo dedicato agli ospiti ${brand.name}`, en: `A price reserved for ${brand.name} guests` },
       subline: { it: 'Esempio di struttura', en: 'An example of the shape' },
     }],
   },
 ];
+
+/**
+ * Bella Vigna's own agreement with each venue whose benefit LunArt has agreed.
+ *
+ * The operator chose LunArt's partner network and catalogue as the starting
+ * point, and asked that no benefit be made claimable for Bella Vigna guests until
+ * the agreement is verified to cover this property too (Property Pack §8). That
+ * is this table. A venue whose entry here is not `confirmed` is published as
+ * *in attivazione*: its name, category and address stay; its benefits, its
+ * eligibility rule and its scanner do not, so nothing about it can be claimed,
+ * locked, sold or validated — and with no card partner left, the Privilege
+ * upgrade withholds itself (`requiresPartners`).
+ *
+ * Confirming one is one word here, once the operator has the venue's agreement
+ * for Bella Vigna in hand. The guest-facing text of the benefit then comes from
+ * `NETWORK`, already written for whichever property is running.
+ */
+export const AGREEMENT = { confirmed: 'confirmed', pending: 'pending' };
+
+export const PROPERTY_AGREEMENTS = {
+  'opera-caffe': { status: AGREEMENT.pending,
+    note: 'Il 30% sul menù al tavolo è un accordo LunArt. Da confermare con il locale che valga per gli ospiti Bella Vigna, e come li riconosce.' },
+  'le-firme': { status: AGREEMENT.pending,
+    note: 'Il 10% per Privilege è un accordo LunArt. Da confermare per Bella Vigna Privilege.' },
+  'blue-velvet': { status: AGREEMENT.pending,
+    note: 'Ingresso in lista max €15 con drink e 20% sui tavoli: accordo LunArt. Da confermare per Bella Vigna Privilege.' },
+};
+
+/** A venue with an agreed benefit for LunArt, as Bella Vigna may show it today. */
+function forThisProperty(partner) {
+  if (partner.partnership_status !== PARTNERSHIP_STATUS.active) return partner;
+  const agreement = PROPERTY_AGREEMENTS[partner.partner_id];
+  if (agreement?.status === AGREEMENT.confirmed) return partner;
+  return {
+    partner_id: partner.partner_id,
+    active: partner.active,
+    partnership_status: PARTNERSHIP_STATUS.activating,
+    name: partner.name,
+    category: partner.category,
+    area: partner.area ?? null,
+    address: partner.address ?? null,
+    directions: Boolean(partner.directions && partner.address),
+    ...(partner.maps ? { maps: partner.maps } : {}),
+    logo: partner.logo ?? null,
+    /** Nothing is promised until the agreement covers this property. */
+    benefits: [],
+    notes: `Partner attivo per LunArt; per ${brand.name} in attivazione. ${agreement?.note ?? ''}`.trim(),
+    verify: { level: 'blocker', note: agreement?.note ?? `Accordo per ${brand.name} da confermare.` },
+  };
+}
+
+export const PARTNERS = NETWORK.map(forThisProperty);
 
 /**
  * The register in force, which is not always the one written above.

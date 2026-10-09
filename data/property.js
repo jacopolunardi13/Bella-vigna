@@ -1,19 +1,22 @@
 /**
- * Who LunArt is and how a guest reaches a person.
+ * Who Bella Vigna is and how a guest reaches a person.
  *
- * Contact details are deliberately conservative. The InYourLife September 2026
- * draft introduced a reception landline (+39 055 0134317) and an info@lunartfirenze.com
- * address; the client's own corrections document asks for both to be verified before
- * publication, so neither is published here. They are carried in `unverifiedContacts`
- * so the review screen can surface them without the guide ever showing them.
+ * Source of truth: Property Pack v1 (operator decisions) > the operational facts
+ * LunArt already runs on > the agency's marketing texts > the June 2026 page now
+ * kept in `legacy/index.html`. Where they disagree, the higher one wins, and where
+ * nothing confirms a fact it is not published — it waits in `unverifiedContacts`
+ * or behind a `verify` flag for the review screen (`?review=1`).
+ *
+ * The contact model is LunArt's, deliberately: one official WhatsApp line for
+ * messages, a telephone for a person, and the management kept apart from both.
  */
 
 export const property = {
-  name: 'LunArt',
-  longName: 'LunArt Firenze',
+  name: 'Bella Vigna',
+  longName: 'Bella Vigna Firenze',
   tagline: {
-    it: 'Bed & Breakfast · Vicolo del Canneto 2, Firenze',
-    en: 'Bed & Breakfast · Vicolo del Canneto 2, Florence',
+    it: 'Bed & Breakfast · Via della Vigna Nuova 8, Firenze',
+    en: 'Bed & Breakfast · Via della Vigna Nuova 8, Florence',
   },
   /* Short enough to sit on one line over the hero photograph at 360px. */
   shortTagline: {
@@ -21,52 +24,54 @@ export const property = {
     en: 'Bed & Breakfast · Florence',
   },
   address: {
-    street: 'Vicolo del Canneto 2',
-    postcode: '50125',
+    street: 'Via della Vigna Nuova 8',
+    postcode: '50123',
     city: { it: 'Firenze', en: 'Florence' },
-    floor: { it: '3° piano', en: '3rd floor' },
-    maps: 'https://maps.app.goo.gl/mQsN2cY8eihAXVjb8',
+    /**
+     * Floor, lift and stairs are not in the Property Pack. The access entry says
+     * so instead of guessing; see `data/entries/arrival.js`.
+     */
+    floor: null,
+    /** A Maps search built from the address itself: nothing to go stale, nothing invented. */
+    maps: 'https://www.google.com/maps/search/?api=1&query=Via+della+Vigna+Nuova+8%2C+50123+Firenze',
   },
   /**
-   * The story, told once. The corrections document asks for the position to be
-   * narrated with force a single time rather than repeated across the page, so the
-   * guide quotes this in exactly one place.
+   * The story, told once (Property Pack §2): Florentine charm, the city at the
+   * door, and the vine on the terrace that gave the house its name.
    */
   intro: {
-    it: 'LunArt sta al terzo piano di un palazzo fiorentino, a pochi passi dal Lungarno '
-      + 'e da Ponte Vecchio — nel punto in cui la Firenze dei monumenti incontra '
-      + 'l’Oltrarno che sale verso Costa San Giorgio e il Piazzale Michelangelo. '
-      + 'Il nome unisce Lunardi, il cognome di famiglia, e Art: alle pareti ci sono '
-      + 'alcune opere della moglie di Jacopo.',
-    en: 'LunArt occupies the third floor of a Florentine palazzo, a few steps from the '
-      + 'Lungarno and Ponte Vecchio — where monumental Florence meets the Oltrarno '
-      + 'climbing towards Costa San Giorgio and Piazzale Michelangelo. The name joins '
-      + 'Lunardi, the family surname, and Art: a few works by Jacopo’s wife hang on '
-      + 'the walls.',
+    it: 'Bella Vigna è un bed & breakfast di tre camere in Via della Vigna Nuova, nel cuore '
+      + 'di Firenze, a pochi passi da Palazzo Strozzi e da Via de’ Tornabuoni. Il nome viene '
+      + 'dalla vite che cresce sulla terrazza: eleganza fiorentina, un’anima toscana e il '
+      + 'comfort di oggi.',
+    en: 'Bella Vigna is a three-room bed & breakfast on Via della Vigna Nuova, in the heart '
+      + 'of Florence, a few steps from Palazzo Strozzi and Via de’ Tornabuoni. The name comes '
+      + 'from the vine growing on the terrace: Florentine elegance, a Tuscan soul and '
+      + 'today’s comfort.',
   },
 
   /**
-   * Said once, in the guide, and no further.
-   *
-   * LunArt is not an art gallery and the guide must not grow into claiming it is:
-   * there are a few paintings by Jacopo's wife, which is a nice detail and not a
-   * collection. If that changes, this is where it changes.
+   * Said once, in the guide. LunArt's equivalent is a line about the paintings on
+   * its walls; Bella Vigna's distinctive element is the vine (Property Pack §2).
    */
   art: {
-    it: 'Qualche opera della moglie di Jacopo, appesa dove serviva qualcosa di vero.',
-    en: 'A few works by Jacopo’s wife, hung where the walls needed something real.',
+    it: 'Una vite vera, sulla terrazza: è da lì che viene il nome della casa.',
+    en: 'A real vine, on the terrace: that is where the house takes its name from.',
   },
 };
 
 /**
- * The official WhatsApp of LunArt.
+ * The official WhatsApp line — the same WhatsApp Business account and number as
+ * LunArt (operator's decision, Property Pack §7).
+ *
+ * Read from LunArt's operating configuration (`OFFICIAL_WHATSAPP` in LunArt's
+ * `data/property.js` at golden 51ac362), not invented and not retyped from a
+ * marketing text. Because the line is shared, every link the guide opens to it
+ * starts the message by naming Bella Vigna (`whatsappHref` in `data/brand.js`),
+ * and the contact card says in words that it is shared.
  *
  * A WhatsApp Business line, and only that: it is not a telephone, so nothing may
- * ever render it as one. A guest who taps a number expecting it to ring and gets
- * silence has been lied to by the interface, which is why the channel is named in
- * the field rather than left to a flag — `whatsapp` holds a number that can be
- * messaged, `phone` holds a number that can be called, and no record carries the
- * same number in both.
+ * ever render it as one.
  */
 export const OFFICIAL_WHATSAPP = '+393925661488';
 
@@ -74,8 +79,11 @@ export const OFFICIAL_WHATSAPP = '+393925661488';
 export const contacts = [
   {
     id: 'whatsapp',
-    name: 'WhatsApp LunArt',
-    role: { it: 'Il modo più veloce per scriverci', en: 'The fastest way to reach us' },
+    name: 'WhatsApp',
+    role: {
+      it: 'Il modo più veloce per scriverci — linea condivisa con LunArt, scrivi che sei ospite di Bella Vigna',
+      en: 'The fastest way to reach us — a line shared with LunArt, say you are a Bella Vigna guest',
+    },
     whatsapp: OFFICIAL_WHATSAPP,
     display: '+39 392 566 1488',
     primary: true,
@@ -83,56 +91,50 @@ export const contacts = [
   {
     id: 'diego',
     name: 'Diego',
-    role: { it: 'Check-in e assistenza — al telefono', en: 'Check-in and guest support — by phone' },
+    role: { it: 'Front desk, check-in e assistenza — al telefono', en: 'Front desk, check-in and guest support — by phone' },
     phone: '+393342115505',
     display: '+39 334 211 5505',
+    /**
+     * Diego is the front desk for Bella Vigna as for LunArt (Property Pack §1, §4).
+     * The number is LunArt's published front-desk telephone, and the June 2026
+     * Bella Vigna page carried the same one.
+     */
+    verify: { level: 'confirm',
+      note: 'Numero di Diego preso dalla configurazione LunArt (stesso numero della vecchia pagina Bella Vigna). Confermare che risponda anche per gli ospiti Bella Vigna.' },
   },
   {
-    id: 'email',
-    name: 'Email',
-    role: { it: 'Per cose non urgenti', en: 'For anything not urgent' },
-    email: 'lunartfirenze@gmail.com',
+    id: 'direzione',
+    name: 'Valentina',
+    role: { it: 'Direzione — prenotazioni, fatture e casi particolari', en: 'Management — bookings, invoices and anything out of the ordinary' },
+    phone: '+393296860909',
+    display: '+39 329 686 0909',
   },
 ];
 
 /**
- * Held, not published.
- *
- * Jacopo's number was in the guide as a second WhatsApp contact. Now that LunArt
- * has one official WhatsApp line, a guest sent to a personal one would be writing
- * where nobody is on duty — and nothing has ever confirmed that this number takes
- * calls, so turning it into a telephone would be inventing the channel rather than
- * moving it. It stays here for reservations and escalation; a decision to put it
- * back in front of guests is one line, and it should be the owner's.
+ * Held, not published. Nothing here is confirmed for Bella Vigna guests yet.
  */
-export const escalation = [
-  {
-    id: 'jacopo',
-    name: 'Jacopo',
-    role: { it: 'Prenotazioni e organizzazione', en: 'Reservations and arrangements' },
-    phone: '+393924725263',
-    display: '+39 392 472 5263',
-  },
-];
+export const escalation = [];
 
 /**
- * Introduced by the InYourLife draft, not yet confirmed by LunArt. Never rendered
- * in the guide; the review screen lists them so they can be confirmed or dropped.
+ * In circulation, not confirmed. Never rendered in the guide; the review screen
+ * lists them so they can be confirmed or dropped (Property Pack §2, §7).
  */
 export const unverifiedContacts = [
-  { label: 'Telefono reception', value: '+39 055 0134317',
-    note: 'Numero introdotto dalla bozza InYourLife. Non pubblicato finché non è confermato che sia attivo e presidiato.' },
-  { label: 'Email', value: 'info@lunartfirenze.com',
-    note: 'Indirizzo presente nella bozza InYourLife; le correzioni del 18-09-2026 ne chiedono la verifica. In guida resta lunartfirenze@gmail.com.' },
-  { label: 'WhatsApp di Jacopo', value: '+39 392 472 5263',
-    note: 'Era pubblicato come secondo contatto WhatsApp. Ora il WhatsApp ufficiale \u00e8 +39 392 566 1488 e questo numero non \u00e8 pi\u00f9 mostrato agli ospiti: resta per prenotazioni ed escalation. Se deve tornare visibile, va deciso se come WhatsApp o come telefono.' },
+  { label: 'Email pubblica', value: 'info@bellavignafirenze.it',
+    note: 'Indicata nei testi dell’agenzia. Verificare che sia operativa prima di pubblicarla, e decidere separatamente il mittente delle email automatiche.' },
+  { label: 'Email (vecchia pagina)', value: 'bellavigna.firenze@gmail.com',
+    note: 'Presente nella pagina di giugno 2026 come “in aggiornamento”. Non pubblicata.' },
+  { label: 'Sito', value: 'www.bellavignafirenze.it',
+    note: 'Dominio indicato dall’agenzia: verificare dominio e sito in sviluppo.' },
+  { label: 'Instagram', value: 'instagram.com/bellavigna.florence',
+    note: 'Indicato dai testi dell’agenzia: verificare.' },
 ];
 
 /**
- * Deliberately short. 112 is certain and covers every emergency in Italy; a
- * specific out-of-hours medical number would have to be verified before it could
- * be published, and a wrong one is worse than none — so the pharmacy entry opens a
- * live Maps search rather than naming a place that may since have closed.
+ * Deliberately short. 112 is certain and covers every emergency in Italy; the
+ * pharmacy entry opens a live Maps search rather than naming a place that may have
+ * closed.
  */
 export const emergency = [
   { id: 'eu', label: { it: 'Emergenze — numero unico europeo', en: 'Emergencies — EU-wide number' },

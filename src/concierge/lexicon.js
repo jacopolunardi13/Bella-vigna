@@ -81,6 +81,8 @@ export const CONCEPTS = {
   wifi: ['wifi', 'wi fi', 'internet', 'rete', 'network', 'connessione', 'connection', 'password',
          'router', 'segnale', 'signal', 'online'],
   welcomeGift: ['benvenuto', 'welcome drink', 'welcome', 'prosecco', 'omaggio'],
+  terrace: ['terrazza', 'terrazzo', 'terrazzino', 'balcone', 'terrace', 'balcony', 'patio',
+            'vite', 'pergola', 'vine', 'grapevine'],
   noise: ['rumore', 'rumori', 'rumoroso', 'rumorosa', 'silenzio', 'silenziosa', 'tranquilla',
           'tranquillo', 'noise', 'noisy', 'quiet', 'loud', 'soundproof'],
   smoking: ['fumare', 'fumo', 'fumatori', 'sigaretta', 'sigarette', 'smoke', 'smoking',

@@ -9,9 +9,16 @@
  * blocker, because a bus is not a car no matter how the word is spelled.
  *
  * `entry` names a row in the knowledge layer. The engine never writes prose.
+ *
+ * The table is shared by every property running this core; the knowledge layer is
+ * not. An intent whose entry the property does not publish — LunArt's heated towel
+ * rail at a house that has none — is dropped below rather than answered with
+ * another property's fact, so the question falls through to "ask a person".
  */
 
-export const INTENTS = [
+import { getEntry } from '../../data/index.js';
+
+const ALL_INTENTS = [
   // ── Arrival ──────────────────────────────────────────────────────────────
   { id: 'checkin', entry: 'checkin', anchors: ['checkin', 'arrival'],
     support: { room: 0.5 }, blockers: ['checkout', 'airport', 'station'] },
@@ -57,6 +64,8 @@ export const INTENTS = [
   { id: 'welcome', entry: 'welcome', anchors: ['welcomeGift'] },
 
   { id: 'noise', entry: 'noise', anchors: ['noise'] },
+
+  { id: 'terrace', entry: 'terrace', anchors: ['terrace'] },
 
   { id: 'smoking', entry: 'smoking', anchors: ['smoking'] },
 
@@ -136,9 +145,24 @@ export const INTENTS = [
   { id: 'celebration', answersPrice: true, entry: 'celebration-in-room', anchors: ['celebration'] },
 ];
 
+/** Only what this property's knowledge layer can answer, refinements included. */
+const answerable = (entryId) => Boolean(getEntry(entryId));
+
+export const INTENTS = ALL_INTENTS
+  .filter((intent) => answerable(intent.entry))
+  .map((intent) => ({
+    ...intent,
+    ...(intent.refine ? { refine: intent.refine.filter((r) => answerable(r.entry)) } : {}),
+    ...(intent.entryByPhase ? {
+      entryByPhase: Object.fromEntries(Object.entries(intent.entryByPhase).filter(([, entry]) => answerable(entry))),
+    } : {}),
+  }));
+
+const known = new Set(INTENTS.map((intent) => intent.id));
+
 /** Offered on a fallback, and as the opening suggestions, per guest phase. */
-export const QUICK_REPLIES = {
+export const QUICK_REPLIES = Object.fromEntries(Object.entries({
   before:  ['checkin', 'access', 'parking', 'luggage'],
   staying: ['wifi', 'breakfast', 'eat', 'room-problem'],
   leaving: ['checkout', 'luggage', 'taxi', 'airport'],
-};
+}).map(([phase, ids]) => [phase, ids.filter((id) => known.has(id))]));

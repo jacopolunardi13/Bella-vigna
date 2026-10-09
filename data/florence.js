@@ -1,8 +1,15 @@
 /**
- * LunArt's own recommendations for the city.
+ * The house's recommendations for the city.
+ *
+ * Bella Vigna and LunArt share a management, and these picks are the ones the
+ * LunArt guide already gives — kept here as the same list rather than invented
+ * afresh. `source: 'lunart'` records where each came from. What changed is every
+ * distance and direction that was measured from LunArt's door in the Oltrarno:
+ * Bella Vigna is across the river, near Palazzo Strozzi, so those are restated as
+ * the district a place is in, never as "two minutes away".
  *
  * Two kinds of information live here and are kept apart on purpose:
- *   - `source: 'lunart'`  — our pick and the reason for it. Stable; ours to change.
+ *   - `source: 'lunart'`  — the house's pick and the reason for it.
  *   - `volatile: true`    — opening hours, prices, closing days. Third-party facts
  *                            that drift. We link out instead of restating them, so
  *                            the guide cannot quietly go stale.
@@ -57,7 +64,7 @@ export const places = [
   {
     id: 'cammillo', category: 'trattoria', source: 'lunart',
     name: 'Trattoria Cammillo',
-    area: { it: 'A due passi, Borgo San Jacopo', en: 'Two minutes away, Borgo San Jacopo' },
+    area: { it: 'Oltrarno, Borgo San Jacopo', en: 'Oltrarno, Borgo San Jacopo' },
     note: { it: 'Cucina toscana classica e clientela fiorentina, praticamente sotto casa.',
             en: 'Classic Tuscan cooking and a Florentine crowd, practically next door.' },
     address: 'Borgo San Jacopo 57/R',
@@ -96,8 +103,10 @@ export const places = [
     id: 'opera-aperitivo', category: 'aperitivo', source: 'lunart',
     name: 'Opera Caffè',
     area: { it: 'Piazza del Duomo', en: 'Piazza del Duomo' },
-    note: { it: 'Lo stesso posto della colazione: ci torni la sera con il vantaggio riservato agli ospiti.',
-            en: 'The same place as breakfast: come back in the evening with your guest benefit.' },
+    // No benefit is promised here: the Opera Caffè agreement is not yet confirmed
+    // for Bella Vigna guests (Property Pack §8). See `commerce/partners.js`.
+    note: { it: 'Lo stesso posto della colazione, ai piedi del Campanile: la sera è un aperitivo con vista.',
+            en: 'The same place as breakfast, at the foot of the bell tower: in the evening, an aperitivo with a view.' },
     address: 'Piazza del Duomo 62/R',
     maps: 'https://maps.app.goo.gl/uok3CmvHBLmwieoV9',
   },
@@ -143,9 +152,9 @@ export const places = [
   {
     id: 'uffizi', category: 'museum', source: 'lunart',
     name: 'Galleria degli Uffizi',
-    area: { it: '5 minuti a piedi', en: '5 minutes on foot' },
-    note: { it: 'Letteralmente dietro l’angolo. Prenota il giorno e l’ora sul sito ufficiale: senza biglietto la fila è lunga.',
-            en: 'Literally round the corner. Book a day and time on the official site: without a ticket the queue is long.' },
+    area: { it: 'Piazzale degli Uffizi', en: 'Piazzale degli Uffizi' },
+    note: { it: 'Prenota il giorno e l’ora sul sito ufficiale: senza biglietto la fila è lunga.',
+            en: 'Book a day and time on the official site: without a ticket the queue is long.' },
     maps: 'https://www.google.com/maps/place/?q=place_id:ChIJgZDFjQBUKhMRzcTwm8i33s0',
     url: 'https://www.uffizi.it',
     volatile: true,
@@ -184,7 +193,7 @@ export const places = [
   {
     id: 'yogaincentro', category: 'wellness', source: 'lunart',
     name: 'YogaInCentro',
-    area: { it: 'A pochi minuti, Via de’ Marsili', en: 'A few minutes away, Via de’ Marsili' },
+    area: { it: 'Oltrarno, Via de’ Marsili', en: 'Oltrarno, Via de’ Marsili' },
     note: { it: 'Lezioni di yoga e meditazione vicinissime a Ponte Vecchio. Prenotazione obbligatoria.',
             en: 'Yoga and meditation classes steps from Ponte Vecchio. Booking required.' },
     maps: 'https://maps.app.goo.gl/gKwiz4GxYgssLUVd8',
@@ -199,24 +208,24 @@ export const itineraries = [
     id: 'half-day',
     title: { it: 'Mezza giornata', en: 'Half a day' },
     body: {
-      it: 'Esci e attraversa Ponte Vecchio. Uffizi, poi Piazza della Signoria con Palazzo Vecchio. Aperitivo da Il Santino tornando verso l’Oltrarno, cena da Cammillo a due passi da casa.',
-      en: 'Step out and cross Ponte Vecchio. The Uffizi, then Piazza della Signoria and Palazzo Vecchio. Aperitivo at Il Santino on the way back into the Oltrarno, dinner at Cammillo a minute from the door.',
+      it: 'Esci verso Palazzo Strozzi e Piazza della Repubblica, poi Piazza della Signoria e gli Uffizi. Attraversa Ponte Vecchio: aperitivo da Il Santino e cena da Cammillo, in Oltrarno.',
+      en: 'Head out past Palazzo Strozzi to Piazza della Repubblica, then Piazza della Signoria and the Uffizi. Cross Ponte Vecchio: aperitivo at Il Santino and dinner at Cammillo, in the Oltrarno.',
     },
   },
   {
     id: 'three-days',
     title: { it: 'Tre giorni', en: 'Three days' },
     body: {
-      it: 'Giorno uno: Uffizi e Piazza della Signoria, cena alla Giostra.\nGiorno due: Accademia per il David, poi il Duomo e la colazione lì accanto; bistecca da Perseus la sera.\nGiorno tre: resta di qua dall’Arno — Palazzo Pitti, il Giardino di Boboli, gelato da Sbrino e aperitivo da Il Santino.',
-      en: 'Day one: the Uffizi and Piazza della Signoria, dinner at La Giostra.\nDay two: the Accademia for the David, then the Duomo and breakfast beside it; steak at Perseus in the evening.\nDay three: stay on this side of the Arno — Palazzo Pitti, the Boboli Garden, gelato at Sbrino and aperitivo at Il Santino.',
+      it: 'Giorno uno: Uffizi e Piazza della Signoria, cena alla Giostra.\nGiorno due: il Duomo e la colazione lì accanto, poi l’Accademia per il David; bistecca da Perseus la sera.\nGiorno tre: passa l’Arno — Palazzo Pitti, il Giardino di Boboli, gelato da Sbrino e aperitivo da Il Santino.',
+      en: 'Day one: the Uffizi and Piazza della Signoria, dinner at La Giostra.\nDay two: the Duomo and breakfast beside it, then the Accademia for the David; steak at Perseus in the evening.\nDay three: cross the Arno — Palazzo Pitti, the Boboli Garden, gelato at Sbrino and aperitivo at Il Santino.',
     },
   },
   {
     id: 'sunset',
     title: { it: 'La passeggiata al tramonto', en: 'The sunset walk' },
     body: {
-      it: 'Da LunArt si sale a piedi: Costa San Giorgio, il Forte di Belvedere, poi il Piazzale Michelangelo. Un’ora buona di salita gentile, e la vista che tutti fotografano. Parti circa novanta minuti prima del tramonto.',
-      en: 'From LunArt you walk uphill: Costa San Giorgio, the Forte di Belvedere, then Piazzale Michelangelo. A good hour of gentle climbing, and the view everyone photographs. Leave about ninety minutes before sunset.',
+      it: 'Attraversa l’Arno a Ponte Santa Trinita o a Ponte Vecchio e sali a piedi: Costa San Giorgio, il Forte di Belvedere, poi il Piazzale Michelangelo. Un’ora buona di salita gentile, e la vista che tutti fotografano. Parti circa novanta minuti prima del tramonto.',
+      en: 'Cross the Arno at Ponte Santa Trinita or Ponte Vecchio and walk uphill: Costa San Giorgio, the Forte di Belvedere, then Piazzale Michelangelo. A good hour of gentle climbing, and the view everyone photographs. Leave about ninety minutes before sunset.',
     },
   },
 ];
@@ -227,7 +236,7 @@ export const dayTrips = [
   { id: 'pisa', name: 'Pisa',
     how: { it: 'Treno da Santa Maria Novella, circa un’ora e corse frequenti.', en: 'Train from Santa Maria Novella, about an hour, running often.' } },
   { id: 'chianti', name: 'Chianti',
-    how: { it: 'Da fare in auto, fra Greve, Radda e Gaiole. Possiamo organizzare un autista.', en: 'Best by car, between Greve, Radda and Gaiole. We can arrange a driver.' } },
+    how: { it: 'Da fare in auto, fra Greve, Radda e Gaiole. Se ti serve un autista, chiedici.', en: 'Best by car, between Greve, Radda and Gaiole. If you need a driver, ask us.' } },
   { id: 'san-gimignano', name: 'San Gimignano',
     how: { it: 'Circa un’ora in auto; in bus con cambio a Poggibonsi.', en: 'About an hour by car; by bus with a change at Poggibonsi.' } },
 ];

@@ -1,140 +1,103 @@
 /**
  * The rooms, as a guest who has already booked needs them: which one am I in, what
- * does it look over, what is in it. Not a sales sheet.
+ * is in it. Not a sales sheet.
  *
- * The categories are LunArt's current mapping, confirmed in October 2026:
+ * Three rooms (Property Pack §3): Standard, Deluxe, Doppia/Tripla con Terrazza.
+ * Their identifiers in QuoVai and their maximum capacity are NOT confirmed yet, so
+ * neither is published: the registry below carries provisional spellings for the
+ * notification parser, and every room carries a `blocker` until the mapping and
+ * the capacity are checked against a real Bella Vigna notification.
  *
- *   301  Standard
- *   302  Queen
- *   303  Superior   — normally set up as a triple
- *   304  Queen      — an extra bed where practical, not a standard triple
- *   305  Superior   — normally set up as a triple
- *
- * Two changes are known to be coming and are deliberately not published: 305 is
- * intended to become a Family room, and a sixth room is expected which may be
- * another Superior. Neither is a fact a guest can act on yet, so neither is in
- * `rooms`; the sixth room waits in `plannedRooms`, which nothing renders.
+ * Photographs come from the property's own June 2026 page (`legacy/index.html`),
+ * where each one was already captioned with its room; the originals are in
+ * `assets/img/_src/`. No LunArt image is used anywhere.
  */
+
+/**
+ * Which strings are rooms, for `commerce/rooms.js` — the one place the QuoVai
+ * parser, the iCal reader, the Staff app and the checkout ask.
+ *
+ * The id is what the store keeps and what a screen prints after "Camera". The
+ * aliases are the other ways a channel or a person may name the same room.
+ * PROVISIONAL until the first real Bella Vigna notification is read: QuoVai may
+ * use its own codes, and then they go here, not into the parser.
+ */
+export const roomRegistry = [
+  {
+    id: 'Standard',
+    aliases: ['camera standard', 'classica', 'camera classica'],
+    label: { it: 'Standard', en: 'Standard' },
+  },
+  {
+    id: 'Deluxe',
+    aliases: ['camera deluxe', 'doccia doppia', 'camera con doccia doppia'],
+    label: { it: 'Deluxe', en: 'Deluxe' },
+  },
+  {
+    id: 'Terrazza',
+    aliases: ['terrace', 'con terrazza', 'camera con terrazza', 'doppia/tripla con terrazza', 'doppia tripla con terrazza', 'terrace room'],
+    label: { it: 'Terrazza', en: 'Terrace' },
+  },
+];
+
+const capacityNote = 'Identificativo QuoVai/PMS e capienza massima da verificare (Property Pack §3, §11). Gli alias nel registro sono provvisori finché non si legge una notifica reale.';
 
 export const rooms = [
   {
-    id: '301',
-    number: '301',
-    category: { it: 'Standard', en: 'Standard' },
-    view: { it: 'Vicolo e Arno', en: 'Lane and Arno' },
+    id: 'Standard',
+    number: 'Standard',
+    category: { it: 'Camera Standard', en: 'Standard room' },
     summary: {
-      it: 'La più raccolta della casa, affacciata sulla strada e sul fiume. Giusta per chi viaggia solo o in due.',
-      en: 'The snuggest room here, looking onto the street and the river. Right for one or two travellers.',
+      it: 'La più raccolta della casa: lampade in travertino e un bagno nei toni del caramello.',
+      en: 'The snuggest room in the house: travertine lamps and a bathroom in caramel tones.',
     },
     photos: [
-      { src: 'rooms/301-camera', alt: { it: 'Camera 301, letto matrimoniale e finestra sul vicolo', en: 'Room 301, double bed and window onto the lane' } },
-      { src: 'rooms/301-bagno', alt: { it: 'Bagno privato della 301 con doccia', en: 'Private bathroom of room 301 with shower' } },
+      { src: 'rooms/standard-camera', alt: { it: 'Camera Standard, letto matrimoniale e lampade a sfera', en: 'Standard room, double bed and globe lamps' } },
+      { src: 'rooms/standard-bagno', alt: { it: 'Bagno della camera Standard, piastrelle nei toni del caramello', en: 'Standard room bathroom, caramel-toned tiles' } },
     ],
+    verify: { level: 'blocker', note: capacityNote },
   },
   {
-    id: '302',
-    number: '302',
-    category: { it: 'Queen', en: 'Queen' },
-    view: { it: 'Arno e scorcio sugli Uffizi', en: 'Arno and a glimpse of the Uffizi' },
-    summary: {
-      it: 'Ampia, con scrivania e un affaccio che prende il fiume e, di lato, gli Uffizi.',
-      en: 'Spacious, with a desk and an outlook that takes in the river and, to one side, the Uffizi.',
-    },
-    /**
-     * Qui c'era anche `302-camera`, la testiera grigia capitonné: il proprietario
-     * ha confermato che quella stanza è la 304, non la 302, e lì è pubblicata —
-     * una sola volta, come `304-testiera`. La scrivania con la finestra resta
-     * della 302, ed è lo scatto che per un po' era finito nella 304.
-     */
-    photos: [
-      { src: 'rooms/302-scrivania', alt: { it: 'Scrivania e TV della camera 302', en: 'Desk and TV in room 302' } },
-      { src: 'rooms/302-letti', alt: { it: 'Camera 302 allestita con due letti singoli', en: 'Room 302 set up with twin beds' } },
-      { src: 'rooms/302-bagno', alt: { it: 'Bagno privato della 302', en: 'Private bathroom of room 302' } },
-    ],
-  },
-  {
-    id: '303',
-    number: '303',
-    category: { it: 'Superior', en: 'Superior' },
-    view: { it: 'Arno e Uffizi, doppia esposizione', en: 'Arno and Uffizi, dual aspect' },
+    id: 'Deluxe',
+    number: 'Deluxe',
+    category: { it: 'Camera Deluxe', en: 'Deluxe room' },
     highlight: true,
     summary: {
-      it: 'Angolare, due finestre su due lati: il fiume da una parte, gli Uffizi dall’altra. Si può allestire come tripla.',
-      en: 'A corner room with windows on two sides: the river on one, the Uffizi on the other. It can take a third bed.',
+      it: 'Luminosa e spaziosa, pensata per le coppie: bagno doppio con due docce, rivestimenti verdi e lavabo freestanding.',
+      en: 'Bright and spacious, made for couples: a double bathroom with two showers, green tiling and a freestanding basin.',
     },
     photos: [
-      { src: 'rooms/303-camera', alt: { it: 'Camera 303 con testiera capitonné', en: 'Room 303 with tufted headboard' } },
-      { src: 'rooms/303-bagno', alt: { it: 'Bagno privato della 303', en: 'Private bathroom of room 303' } },
+      { src: 'rooms/deluxe-camera', alt: { it: 'Camera Deluxe con scrivania e poltrona', en: 'Deluxe room with desk and armchair' } },
+      { src: 'rooms/deluxe-doccia', alt: { it: 'La doccia doppia della camera Deluxe, piastrelle verdi', en: 'The Deluxe room’s double shower, green tiles' } },
+      { src: 'rooms/deluxe-bagno', alt: { it: 'Lavabo freestanding e specchio ad arco nel bagno della Deluxe', en: 'Freestanding basin and arched mirror in the Deluxe bathroom' } },
+      { src: 'rooms/deluxe-angolo', alt: { it: 'Angolo con poltrona nella camera Deluxe', en: 'Armchair corner in the Deluxe room' } },
     ],
+    verify: { level: 'blocker', note: capacityNote },
   },
   {
-    id: '304',
-    number: '304',
-    category: { it: 'Queen', en: 'Queen' },
-    view: { it: 'Arno e Uffizi', en: 'Arno and Uffizi' },
+    id: 'Terrazza',
+    number: 'Terrazza',
+    category: { it: 'Doppia/Tripla con Terrazza', en: 'Double/Triple with Terrace' },
     summary: {
-      it: 'Spaziosa e luminosa, con vista sul fiume e sugli Uffizi. Su richiesta può accettare un letto aggiuntivo, ma non è una tripla standard.',
-      en: 'Bright and roomy, looking over the river and the Uffizi. It can take an extra bed on request, though it is not a standard triple.',
-    },
-    /**
-     * La galleria confermata dal proprietario sulla scheda Booking della 304.
-     *
-     * Quattro scatti, e ognuno sta in `rooms/304-…` perché è il nome del file a
-     * portare l'attribuzione: `304-letto` e `304-finestra` erano archiviati come
-     * foto generiche della struttura, `304-testiera` era pubblicata per errore
-     * come 302. Rinominati, non copiati, così nessuno dei tre può ricomparire
-     * altrove sotto il vecchio nome.
-     *
-     * Non c'è più nulla qui della 302: `304-camera` era la scrivania della 302 —
-     * la 302 la ha già come `302-scrivania` — ed è stata tolta.
-     */
-    photos: [
-      { src: 'rooms/304-letto', alt: { it: 'Camera 304 con letto matrimoniale e finestra aperta', en: 'Room 304 with double bed and open window' } },
-      { src: 'rooms/304-testiera', alt: { it: 'Letto della 304 con testiera grigia capitonné', en: 'The bed in room 304 with its grey padded headboard' } },
-      { src: 'rooms/304-finestra', alt: { it: 'L’Arno visto dalla finestra della camera 304', en: 'The Arno seen from the window of room 304' } },
-      { src: 'rooms/304-bagno', alt: { it: 'Bagno privato della 304 con specchio illuminato e doccia', en: 'Private bathroom of room 304, illuminated mirror and shower' } },
-    ],
-  },
-  {
-    id: '305',
-    number: '305',
-    category: { it: 'Superior', en: 'Superior' },
-    view: { it: 'Arno e Uffizi, doppia esposizione', en: 'Arno and Uffizi, dual aspect' },
-    summary: {
-      it: 'Ampia e luminosa, doppia esposizione sul fiume e sugli Uffizi. Si può allestire come tripla.',
-      en: 'Large and light, dual aspect over the river and the Uffizi. It can take a third bed.',
+      it: 'Con una terrazza privata tra le viti — è da qui che viene il nome della casa. Travi a vista e frigobar in camera.',
+      en: 'With a private terrace among the vines — the house takes its name from it. Exposed beams and a minibar in the room.',
     },
     photos: [
-      { src: 'rooms/305-camera', alt: { it: 'Camera 305 con letto matrimoniale', en: 'Room 305 with double bed' } },
-      { src: 'rooms/305-bagno', alt: { it: 'Bagno privato della 305', en: 'Private bathroom of room 305' } },
+      { src: 'property/terrazza', alt: { it: 'La terrazza privata, con il salottino tra le piante', en: 'The private terrace, its lounge among the plants' } },
+      { src: 'rooms/terrazza-camera', alt: { it: 'Camera con terrazza, travi a vista e porta finestra', en: 'Terrace room, exposed beams and French window' } },
+      { src: 'rooms/terrazza-letto', alt: { it: 'Il letto della camera con terrazza', en: 'The bed in the terrace room' } },
+      { src: 'rooms/terrazza-bagno', alt: { it: 'Bagno della camera con terrazza', en: 'Terrace room bathroom' } },
     ],
+    verify: { level: 'blocker',
+      note: `${capacityNote} Inoltre: il Property Pack descrive il bagno di questa camera “color turchese”, mentre la foto che la vecchia pagina gli attribuiva (rooms/terrazza-bagno) ha toni pietra — confermare l’abbinamento o sostituire la foto. Il testo non nomina il colore finché non è chiarito.` },
   },
 ];
 
+/** Nothing is announced as coming. */
+export const plannedRooms = [];
 
-/**
- * Known to be coming, deliberately unpublished.
- *
- * A sixth room is expected and 305 is intended to become a Family room. Neither is
- * something a guest can book, and publishing a category before it exists is how a
- * guide ends up contradicting the booking engine. Nothing renders this list.
- */
-export const plannedRooms = [
-  {
-    id: '306',
-    number: '306',
-    category: null,
-    note: {
-      it: 'Sesta camera attesa. Categoria non ancora definita: potrebbe essere un’altra Superior.',
-      en: 'A sixth room is expected. The category is not settled: it may be another Superior.',
-    },
-    verify: { level: 'confirm',
-      note: 'Non pubblicare la categoria della sesta camera finché non è decisa e vendibile. Vale anche per il passaggio della 305 a Familiare.' },
-  },
-];
-
-/** Shared across every room, so it is stated once rather than five times. */
+/** Shared across every room, so it is stated once rather than three times (Property Pack §3). */
 export const roomsCommon = {
-  it: 'Tutte le camere sono al terzo piano, con bagno privato, climatizzazione, Smart TV, macchina Nespresso, bollitore, mini-frigo e cassaforte. Pantofole sì, accappatoio no.',
-  en: 'Every room is on the third floor, with a private bathroom, climate control, a Smart TV, a Nespresso machine, a kettle, a mini-fridge and a safe. Slippers yes, bathrobe no.',
+  it: 'In tutte le camere: bagno privato, aria condizionata, Wi-Fi, macchina Nespresso con caffè e tè e prodotti da bagno. La camera con terrazza ha anche il frigobar.',
+  en: 'Every room has a private bathroom, air conditioning, Wi-Fi, a Nespresso machine with coffee and tea, and toiletries. The terrace room also has a minibar.',
 };
