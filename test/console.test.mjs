@@ -508,6 +508,14 @@ test('the console page is locked down: strict CSP, no framing, passkeys allowed 
   }
 });
 
+test('a guide server never serves the console’s page or worker (it would take over the guide’s scope)', async (t) => {
+  const env = await withConsole(t);
+  for (const path of ['/console.html', '/console-sw.js']) {
+    assert.equal((await fetch(`${env.bvUrl}${path}`)).status, 404, path);
+  }
+  assert.equal((await fetch(`${env.origin}/console-sw.js`)).status, 200, 'the console serves its own');
+});
+
 test('the console refuses a store that is not a console’s', async () => {
   const backend = { name: 'memory', async load() { return { meta: { property_id: 'lunart' }, reservations: { a: {} } }; }, async save() {} };
   await assert.rejects(() => createConsoleStore({ backend }), { code: 'console-store-refused' });
@@ -535,4 +543,37 @@ test('a client with no cookie support still cannot be signed in by someone else�
   assert.equal((await client.get('/console/api/me')).status, 401);
   client.cookie = `__Host-staff=${'a'.repeat(43)}`;
   assert.equal((await client.get('/console/api/me')).status, 401);
+});
+
+/**
+ * The staging console keeps people and passkeys in Postgres (Render's free web
+ * services have no persistent disk). Runs when a throwaway database is given:
+ *   CONSOLE_TEST_DATABASE_URL=postgres://… node --test test/console.test.mjs
+ */
+test('Postgres: people and passkeys survive a restart', { skip: !process.env.CONSOLE_TEST_DATABASE_URL }, async () => {
+  const url = process.env.CONSOLE_TEST_DATABASE_URL;
+  const options = { databaseUrl: url, databaseSsl: false };
+  const { default: pg } = await import('pg');
+  const admin = new pg.Client({ connectionString: url });
+  await admin.connect();
+  await admin.query('DROP TABLE IF EXISTS staff_console_state');
+  try {
+    const first = await createConsoleStore(options);
+    assert.equal(first.backend, 'postgres');
+    await syncOperators(first, CONSOLE_OPERATORS);
+    await first.update((doc) => { doc.credentials.k1 = { id: 'k1', user_id: 'diego', public_key: 'x', counter: 0 }; });
+    await first.close();
+
+    const second = await createConsoleStore(options);
+    const after = await second.read((doc) => ({ people: Object.keys(doc.users).sort(), key: doc.credentials.k1?.user_id }));
+    assert.deepEqual(after, { people: ['diego', 'jacopo', 'valentina'], key: 'diego' });
+    await second.close();
+
+    // A row that is not a console's is refused, not overwritten.
+    await admin.query(`UPDATE staff_console_state SET doc = '{"meta":{"property_id":"lunart"}}'::jsonb`);
+    await assert.rejects(() => createConsoleStore(options), { code: 'console-store-refused' });
+  } finally {
+    await admin.query('DROP TABLE IF EXISTS staff_console_state');
+    await admin.end();
+  }
 });

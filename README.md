@@ -13,7 +13,12 @@ Core e configurazione, contenuti, branding e dati di Bella Vigna separati.
 npm ci
 npm test                                   # suite completa, senza browser
 GUIDE_PREVIEW=1 STAFF_TOKEN=prova npm start  # staging locale → http://localhost:4173/preview
+npm run console:local                      # Staff App unica + Bella Vigna + LunArt simulato → http://localhost:4180
 ```
+
+**Staff App unica** per LunArt e Bella Vigna: `server/console/` (accesso con passkey,
+ruoli e strutture verificati sul server, notifiche centralizzate). Documento:
+`docs/STAFF-UNIFICATA.md`; staging su Render: `docs/PREVIEW.md` e `render.yaml`.
 
 ## Dove sta cosa
 
@@ -23,7 +28,8 @@ GUIDE_PREVIEW=1 STAFF_TOKEN=prova npm start  # staging locale → http://localho
 | `data/property.js` · `data/rooms.js` · `data/entries/` · `data/florence.js` | i fatti di Bella Vigna, scritti una volta (guida + Concierge) |
 | `commerce/prices.js` | prezzi — tutti `placeholder` finché l'operatore non li conferma |
 | `commerce/partners.js` | rete partner LunArt + `PROPERTY_AGREEMENTS` di Bella Vigna (tutti in attesa) |
-| `server/` · `src/` | Core condiviso con LunArt (delta documentato in `docs/CORE-DELTA.md`) |
+| `server/` · `src/` | Core condiviso con LunArt (delta documentato in `docs/CORE-DELTA.md`, strategia in `docs/CORE-STRATEGIA.md`) |
+| `server/console/` · `data/console.js` · `console.html` | la Staff App unica: server, persone e ruoli, pagina |
 | `assets/img/_src/` | foto e logo originali di Bella Vigna; `tools/make-bella-vigna-assets.py` |
 | `legacy/index.html` | la pagina di giugno 2026, conservata identica, non servita |
 

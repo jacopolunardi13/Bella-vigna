@@ -1,48 +1,63 @@
-# Bella Vigna — staging (anteprima privata)
+# Staging: Guest Guide Bella Vigna + Staff App unica
 
-La Guest Guide Bella Vigna completa — server Node reale, guida, Extras, Pass, Staff,
-prenotazioni — su un URL temporaneo, con spento tutto ciò che potrebbe raggiungere
-una persona reale. Servizio indipendente da LunArt: altro URL, altro token Staff,
-altra chiave delle card, nessun dato in comune.
+Tre servizi di prova, tutti in modalità dimostrazione, nessuno di produzione:
 
-Il deploy parte dal branch di lavoro `ccr-412adc5b-p2jc5l`. Non tocca `main`, LunArt,
-né alcuna produzione.
+| Servizio | Cosa | Indirizzo previsto |
+|---|---|---|
+| `bella-vigna-preview` | la Guest Guide Bella Vigna completa (guida, Extras, Pass, prenotazioni inventate) | https://bella-vigna-preview.onrender.com/preview |
+| `lunart-staff-staging` | il codice LunArt della PR #6, in anteprima, con prenotazioni inventate — **non** il LunArt in produzione | https://lunart-staff-staging.onrender.com |
+| `staff-console-staging` | la Staff App unica per le due strutture, con passkey | https://staff-console-staging.onrender.com |
 
-## Avviarlo in locale (nessun account necessario)
+Più un database Postgres gratuito per la console (persone e passkey), che scade
+dopo 30 giorni.
 
-```sh
-npm ci
-GUIDE_PREVIEW=1 STAFF_TOKEN=prova node server/index.js
-# poi apri http://localhost:4173/preview
-```
+Tutto parte dai branch di lavoro (`ccr-412adc5b-p2jc5l` qui, `feat/staff-console-bridge`
+su LunArt). Non tocca `main`, il LunArt in produzione, né alcun pagamento, email o
+casella reale. **Costo: zero** (piani gratuiti).
 
-## Pubblicarlo su Render (operazione dell'operatore)
+## Pubblicarlo (una volta sola)
 
-1. https://render.com → accesso con GitHub → autorizzare la sola lettura del
-   repository `jacopolunardi13/Bella-vigna`.
-2. **New + → Blueprint** → repository `Bella-vigna` → Render legge `render.yaml`
-   dal branch `ccr-412adc5b-p2jc5l` → **Apply**.
-3. Servizio `bella-vigna-preview` → **Environment** → leggere `STAFF_TOKEN`
-   (generato da Render, diverso da quello di LunArt).
-4. Aprire `https://<servizio>.onrender.com/preview`.
+Serve il proprio account Render: nessuno può farlo al posto del titolare, perché
+collega Render al GitHub del titolare.
 
-## Cosa contiene
+1. Aprire https://render.com → **Sign in with GitHub**; autorizzare l'accesso ai
+   repository `jacopolunardi13/Bella-vigna` e `jacopolunardi13/lunart`.
+2. **New + → Blueprint** → repository `Bella-vigna`, branch `ccr-412adc5b-p2jc5l` →
+   Render legge `render.yaml` e mostra i 3 servizi e il database, tutti *Free* →
+   **Apply**.
+3. Attendere che i tre servizi siano *Live* (alcuni minuti la prima volta).
+4. Se Render ha assegnato a un servizio un indirizzo diverso da quelli in tabella
+   (succede quando il nome è già preso), correggerlo una volta in
+   **Env Groups → staff-staging-links**.
 
-| | |
-|---|---|
-| `/preview` | la porta d'ingresso: tutti i link e cosa è spento |
-| `/` | la guida come la vede chi non ha un link personale |
-| `/g/<token>` | due prenotazioni **inventate** (camere Standard e Terrazza), con Pass |
-| `/?review=1` | ogni dato ancora da confermare, nel suo contesto (non visibile agli ospiti) |
-| `/recover` | link perso: cognome + numero di prenotazione |
-| `/staff` | Staff di questo server, solo per lo staging: in produzione si userà la Staff App unica LunArt + Bella Vigna (`docs/STAFF-UNIFICATA.md`) |
-| `/validate-card` | pagina venue generica |
-| `/api/health` | cosa è configurato e cosa è spento |
+## Dal telefono
+
+**Guest Guide**: aprire `https://bella-vigna-preview.onrender.com/preview`: da lì la
+guida pubblica, due link personali di ospiti inventati (camera Standard e Terrazza),
+la revisione dei dati da confermare.
+
+**Staff App**:
+
+1. Su Render, servizio `staff-console-staging` → **Environment** → copiare il valore di
+   `CONSOLE_SETUP_CODE` (è la chiave del primo accesso del titolare).
+2. Sul telefono aprire `https://staff-console-staging.onrender.com` → *Primo accesso
+   del titolare, o ripristino* → incollare il codice → **Crea la passkey del titolare**
+   → Face ID. Si è dentro come Jacopo.
+3. Su iPhone: Condividi → **Aggiungi alla schermata Home**, poi aprirla da lì:
+   è il modo in cui iOS consente le notifiche push. In *Accesso → Attiva su questo
+   telefono*.
+4. Per provare i ruoli: *Accesso → Persone → Link di primo accesso* per Valentina o
+   Diego, aprire il link su un altro telefono (o un'altra finestra in incognito) e
+   creare la passkey.
+
+Il servizio gratuito si addormenta dopo ~15 minuti senza traffico: la prima apertura
+dopo una pausa impiega 30–60 secondi. Le passkey e le persone restano (database);
+le prenotazioni inventate delle due strutture si rigenerano a ogni risveglio.
 
 ## Cosa è spento, e come
 
-`GUIDE_PREVIEW=1` viene letto per primo in `server/config.js` e **impedisce di leggere**
-le credenziali, non si limita a non usarle:
+`GUIDE_PREVIEW=1` (Bella Vigna) e `LUNART_PREVIEW=1` (LunArt) vengono letti per
+primi e **impediscono di leggere** le credenziali pericolose:
 
 | | in staging |
 |---|---|
@@ -50,18 +65,22 @@ le credenziali, non si limita a non usarle:
 | Email agli ospiti | preparate e conservate, mai spedite |
 | Casella QuoVai | non letta: le prenotazioni sono inventate |
 | Calendario parrucchiere | non letto né scritto |
-| Push | registrate, non inviate |
 | Password Wi-Fi | mai letta, mai servita |
-| Prezzi | i placeholder (prezzi LunArt) sono vendibili, per provare ogni flusso |
-| Privilege | **non acquistabile**: nessun accordo partner è confermato per Bella Vigna, e non si inventa un partner dimostrativo |
+| Prezzi | i placeholder sono vendibili, per provare ogni flusso |
+| Privilege (Bella Vigna) | **non acquistabile**: nessun accordo partner confermato |
+| Notifiche Staff | solo ai telefoni degli operatori che le attivano nella console |
 
-## Da sapere
+## In locale (nessun account)
 
-- **Si addormenta**: sul piano gratuito il servizio si ferma dopo ~15 minuti senza
-  traffico; la prima richiesta dopo impiega ~30 secondi.
-- **Dimentica**: niente disco. A ogni riavvio rigenera le due prenotazioni inventate
-  con nuovi link personali, per questo `/preview` li legge al momento.
+```sh
+npm ci
+node tools/console-local.mjs     # console :4180, Bella Vigna :4173, LunArt simulato :4174
+# stampa il codice del primo accesso; aprire http://localhost:4180
+```
+
+Solo la guida: `GUIDE_PREVIEW=1 STAFF_TOKEN=prova node server/index.js` → http://localhost:4173/preview
 
 ## Spegnerlo
 
-Render → servizio → **Settings → Delete Service**. Nient'altro è coinvolto.
+Render → Blueprint → **Delete** (o i singoli servizi e il database da *Settings*).
+Nient'altro è coinvolto.

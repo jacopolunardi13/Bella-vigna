@@ -24,7 +24,7 @@ revisione: **`/?review=1`** sull'anteprima (invisibile agli ospiti).
 | A11 | Pulizia quotidiana reale; policy fumo (anche in terrazza); animali; culla/letto aggiuntivo | `stay.js` → `cleaning`, `smoking`, `pets`, `children` |
 | A12 | Numero di Diego per gli ospiti Bella Vigna (+39 334 211 5505, dalla config LunArt) | `data/property.js` → `contacts.diego.verify` |
 | A13 | Condizioni di prenotazione dirette di Bella Vigna (se diverse da "fa fede la conferma") | `help.js` → `booking-terms` |
-| A14 | **Logo**: confermare che `Bella_Vigna_logo_oro_classico.jpg` (email di Valentina Longo, 11/03/2026, ora la sorgente) è la versione approvata; esiste un file vettoriale per la stampa? **Foto**: approvare la selezione per camera (16 foto da Drive, cartella principale e "nuove foto settembre 2026"; elenco e motivi in `assets/img/_src/README.md`) | `assets/img/_src/`, `tools/import-room-photos.py`, poi `python3 -I tools/make-bella-vigna-assets.py` e `node tools/optimize-images.mjs` |
+| A14 | **Logo** `Bella_Vigna_logo_oro_classico.jpg` e **16 foto** autorizzati per lo staging (9 ottobre); approvazione definitiva dopo la visione dell'anteprima da smartphone. Esiste un file vettoriale per la stampa? (elenco foto e motivi in `assets/img/_src/README.md`) | `assets/img/_src/`, `tools/import-room-photos.py`, poi `python3 -I tools/make-bella-vigna-assets.py` e `node tools/optimize-images.mjs` |
 | A15 | Consigli su Firenze: confermare che valgono anche per Bella Vigna (sono quelli LunArt, senza distanze) | `data/entries/florence.js` → `eat.verify` |
 
 ## B. Canali e identità
@@ -65,18 +65,20 @@ revisione: **`/?review=1`** sull'anteprima (invisibile agli ospiti).
 | E2 | Merge del branch in `main` | Se `main` del repository Bella Vigna è pubblicato (es. GitHub Pages), il merge sostituisce la pagina di giugno con la guida (la pagina resta in `legacy/`, non servita) |
 | E3 | Approvazione del Core delta per LunArt (`docs/CORE-DELTA.md`) | PR separata sul repository LunArt, testata lì |
 
-## E-bis. Staff App unica (decisione dell'operatore, 9 ottobre 2026)
+## E-bis. Staff App unica (decisioni del 9 ottobre 2026: approvate)
 
-Bella Vigna **non** pubblica una propria Staff App: si opera da un'unica console per
-LunArt e Bella Vigna (`docs/STAFF-UNIFICATA.md`). La `/staff` di questo server resta
-solo in staging, come banco di prova delle API.
+Bella Vigna **non** pubblica una propria Staff App: si opera dalla console unica per
+LunArt e Bella Vigna (`docs/STAFF-UNIFICATA.md`), costruita e provata in staging. La
+`/staff` di questo server resta solo come banco di prova delle API.
 
-| # | Da decidere | Note |
+| # | Da fare per la produzione | Note |
 |---|---|---|
-| S1 | Approccio: console sopra le API delle due strutture | Raccomandato; LunArt in produzione non va toccato per partire |
-| S2 | Operatori, ruoli e strutture per ciascuno | Proposta: rimborsi, catture e catch-up email solo direzione/admin |
-| S3 | Metodo di accesso (password o passkey) e indirizzo della console | |
-| S4 | Accesso in scrittura al repository LunArt per la PR del Core | Branch dedicato, nessun merge senza approvazione |
+| S1 | Approvare e fare il merge della PR LunArt #6 (ponte verso la console), poi il deploy di LunArt | Senza variabili nuove non cambia nulla in produzione |
+| S2 | Servizio console di produzione: indirizzo definitivo (es. `staff.<dominio>`), archivio persistente (disco o Postgres a pagamento), `CONSOLE_SETUP_CODE` nuovo | Le passkey sono legate all'indirizzo: chi ha provato lo staging le ricrea in produzione |
+| S3 | `CONSOLE_SERVICE_TOKEN` e `CONSOLE_RELAY_SECRET` nuovi per ciascuna struttura, gli stessi valori sulla console | Mai quelli dello staging, mai `STAFF_TOKEN` |
+| S4 | Primo accesso del titolare, inviti a Valentina e Diego, notifiche attivate sui loro telefoni | Consegna dei link di persona |
+| S5 | Ritiro del token condiviso: `STAFF_TOKEN_RETIRED=1` su LunArt e Bella Vigna quando tutti usano la console | Reversibile togliendo la variabile |
+| S6 | `CONSOLE_VAPID_*` (o quelle generate dalla console, conservate nel suo archivio) | Una sola coppia per la console |
 
 ## F. Sequenza di attivazione (dal Master Bible §26, adattata)
 

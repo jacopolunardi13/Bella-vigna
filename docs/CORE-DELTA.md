@@ -6,9 +6,9 @@ riportare in LunArt. Il confronto completo è `git diff 99454e8 -- server src co
 
 **Regola**: un cambiamento valido per tutte le strutture va riportato nel Core di
 LunArt con una PR sul suo repository, revisionata e testata lì; una differenza solo
-di Bella Vigna resta in `data/` o nei file commerce della struttura. Nessuna PR è
-stata aperta su LunArt: questo branch non ha accesso in scrittura a LunArt e il
-mandato era di non toccarlo.
+di Bella Vigna resta in `data/` o nei file commerce della struttura. Con
+l'autorizzazione del 9 ottobre le modifiche arrivano a LunArt con PR piccole, da
+branch dedicati, senza merge automatico: la prima è jacopolunardi13/lunart#6.
 
 ## Verifica di non regressione per LunArt
 
@@ -44,9 +44,21 @@ asset), 2 richiedono una working copy git. Nessuna regressione funzionale.
 | Immagini | `tools/optimize-images.mjs` | Genera sempre tutte le larghezze (mai ingrandendo) | `picture()` chiede sempre la -1024: con sorgenti < 1024 px restava un buco servito come HTML |
 | Views | `src/ui/home.js`, `src/commerce/ui/pass.js` | Immagine "Scopri Firenze" e hero da `brand`; titolo camera da `roomLabel` | Nessuna foto LunArt |
 
+## Staff App unica (console) — in LunArt con la PR #6 per la parte che riguarda le strutture
+
+| Area | File | Cosa | In LunArt |
+|---|---|---|---|
+| Accesso Staff API | `server/app.js`, `server/config.js`, `server/http.js` | `CONSOLE_SERVICE_TOKEN` accettato insieme a `STAFF_TOKEN`; `STAFF_TOKEN_RETIRED` ritira il token condiviso e porta `/staff` alla console; confronto dei token in tempo costante (`sameSecret`) | PR #6 |
+| Identità nelle risposte | `server/app.js` | `property` in ogni risposta Staff, `rooms` nella dashboard | PR #6 (LunArt: costante `lunart`) |
+| Notifiche | `server/relay.js`, `server/push.js` | Relay firmato HMAC verso la console, mai bloccante | PR #6 |
+| Salute | `server/app.js` | `integrations.staffConsole` (mai segreti) | PR #6 |
+| Console | `server/console/*`, `data/console.js`, `console.html`, `console-sw.js`, `src/staff/app.js` (modalità console) | La console stessa | Vive qui; a regime nel Core condiviso (`docs/CORE-STRATEGIA.md`) |
+| Pagina guida | `server/app.js` | La guida non serve `console.html` né `console-sw.js` (un service worker della console prenderebbe lo scope della guida) | con la console |
+
 ## Segnalazioni per LunArt (non corrette lì)
 
 0. **Checkout Privilege senza partner** (v. tabella): in LunArt oggi è latente perché i partner esistono, ma è lo stesso buco. Da riportare per primo.
+7. Su `main` @ eac9b68 un test fallisce già (`test/pass.test.mjs` › "each moment leads with what that moment is for": atteso `wine-in-room`, ora `privilege-card`) e il QA `qa-reservations` segnala la home personale lunga 6,3 schermate: entrambi dal commit 0269afd (offerte Privilege-first), non dalle PR di questo lavoro.
 1. `commerce/prices.dev.js` sovrascrive in anteprima la Light Breakfast con **1 €** anche se in `prices.js` è confermata a 49 € (il commento "è l'unico prodotto senza prezzo" è superato). In anteprima LunArt la colazione in camera appare a 1 €. Corretto qui (Bella Vigna: nessun fixture sovrascrive un prezzo esistente).
 2. `server/http.js` → `serveStatic` serve qualunque file sotto la root del repository, inclusi sorgenti server e un eventuale `.env`. Corretto qui (v. tabella).
 3. `tools/optimize-images.mjs` non genera la variante -1024 per sorgenti larghe meno di 1024 px (v. tabella).

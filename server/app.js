@@ -919,7 +919,7 @@ export async function createApp(overrides = {}) {
       url: `${origin}/g/${reservation.guide_token}`,
     }));
 
-    sendHtml(res, 200, renderPreviewIndex({ origin, links, escapeHtml }), { 'cache-control': 'no-store' });
+    sendHtml(res, 200, renderPreviewIndex({ origin, links, escapeHtml, consoleUrl: settings.console?.url ?? '' }), { 'cache-control': 'no-store' });
   }
 
   /**
@@ -1798,6 +1798,9 @@ export async function createApp(overrides = {}) {
     }
 
     if (req.method === 'GET' || req.method === 'HEAD') {
+      // The Staff console's page and worker belong to the console's own origin: a
+      // worker registered from here would take over the guide's scope.
+      if (url.pathname === '/console.html' || url.pathname === '/console-sw.js') { sendText(res, 404, 'Not found'); return; }
       if (url.pathname === '/' || url.pathname === '/index.html') { await getIndexPage(req, res); return; }
       if (await serveStatic(req, res, ROOT, url.pathname)) return;
       // Hash routing means everything unknown is still the guide.

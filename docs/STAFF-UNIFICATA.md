@@ -5,9 +5,9 @@ Guide indipendenti, una sola Staff App** per entrambe le strutture, con un acces
 per operatore, filtri Tutte | LunArt | Bella Vigna, permessi lato server per utente,
 ruolo e struttura, notifiche centralizzate e possibilità di aggiungere strutture.
 
-Questo documento: (1) com'è fatta davvero oggi la Staff App LunArt, (2) la soluzione
-proposta, (3) cosa cambia nei due repository e in che ordine, (4) le decisioni
-che servono prima di costruirla.
+Questo documento: (1) com'era la Staff App LunArt, (2) la soluzione, (3) cosa cambia
+nei due repository e in che ordine, (4) le decisioni prese, (5) cosa è stato
+costruito, (6) il recupero dell'accesso, (7) il ritiro del token condiviso.
 
 ## 1. Audit: la Staff App LunArt @ 51ac362
 
@@ -78,29 +78,100 @@ modifiche a LunArt servono per migliorare, non per iniziare, e arrivano via PR.
 
 ## 3. Piano e repository
 
-| Passo | Dove | Tocca LunArt prod? |
-|---|---|---|
-| 1. Console: utenti/ruoli/strutture, proxy autorizzato, viste aggregate, filtri, audit | Core, in questo branch | No |
-| 2. Staff App estesa (selettore struttura, badge, viste "Tutte") | `src/staff/app.js`, stesso branch | No |
-| 3. Push centralizzate: relay firmato dalle strutture alla console | Core, stesso branch | No (LunArt continua con le sue push finché non adotta il relay) |
-| 4. PR su LunArt (branch dedicato): delta Core di identità e isolamento, `property` nelle risposte Staff, relay push, credenziale di servizio separata dal token Staff | repository `lunart`, PR revisionata | Solo dopo merge e deploy approvati |
-| 5. Staging console con due server di staging (LunArt staging + Bella Vigna staging) | Render, servizi separati | No |
-| 6. Go-live: console in produzione, `/staff` delle strutture → console | dopo approvazione | Sì, con approvazione |
+| Passo | Dove | Tocca LunArt prod? | Stato |
+|---|---|---|---|
+| 1. Console: persone/ruoli/strutture, proxy autorizzato, viste aggregate, filtri, registro | Core, in questo branch | No | fatto |
+| 2. Staff App estesa (selettore struttura, badge, viste "Tutte", Accesso) | `src/staff/app.js`, stesso branch | No | fatto |
+| 3. Notifiche centralizzate: relay firmato dalle strutture alla console | Core, stesso branch | No | fatto |
+| 4. PR su LunArt: credenziale della console, ritiro progressivo del token condiviso, `property` nelle risposte Staff, relay | `jacopolunardi13/lunart#6` (bozza) | Solo dopo merge e deploy approvati; tutto spento senza variabili | aperta |
+| 5. Staging: Bella Vigna + LunArt (branch della PR, in anteprima) + console | `render.yaml`, Render, servizi gratuiti | No | blueprint pronto |
+| 6. Go-live: console in produzione, `/staff` delle strutture → console | dopo approvazione | Sì, con approvazione | da fare |
 
-Nota sul codice duplicato: oggi il Core vive in due repository (LunArt e questo).
-La PR del passo 4 li riallinea; a regime conviene che il Core abbia una sola casa
-(il repository LunArt o un repository Core dedicato) e che Bella Vigna ne contenga
-solo la configurazione. È una scelta da fare insieme (v. decisioni).
+La PR LunArt è volutamente limitata al ponte verso la console: il resto del delta Core
+(`docs/CORE-DELTA.md`) arriverà con PR separate. La strategia per dare al Core una
+sola casa è in `docs/CORE-STRATEGIA.md`.
 
-## 4. Decisioni necessarie prima di costruire la console
+## 4. Decisioni (approvate dall'operatore il 9 ottobre 2026)
 
-1. **Conferma dell'approccio** "console sopra le API delle strutture" (§2).
-2. **Operatori e ruoli**: chi accede (Diego, Valentina, Jacopo, altri?), a quali
-   strutture, e quali azioni sono riservate (proposta: rimborsi, catture di
-   pagamento e invio catch-up email solo direzione/admin; front desk tutto il resto).
-3. **Metodo di accesso**: password per operatore (la più semplice) oppure passkey.
-   Il link via email richiederebbe un mittente operativo che oggi non c'è.
-4. **Indirizzo della console** (es. `staff.<dominio>`) e hosting (Render come le guide).
-5. **Accesso in scrittura al repository LunArt** per aprire la PR (branch dedicato,
-   nessun merge senza approvazione).
-6. **Casa del Core a regime**: repository LunArt o repository Core dedicato.
+| # | Decisione |
+|---|---|
+| 1 | Approccio: console sopra le API delle strutture — **approvato** |
+| 2 | Operatori: Jacopo titolare (entrambe, e strutture future), Valentina direzione (entrambe), Diego front desk (entrambe). Nessun altro utente per ora |
+| 3 | Accesso con **passkey**, recupero affidabile, nessuna crittografia fatta in casa |
+| 4 | Render; per ora solo staging, dominio definitivo più avanti; nessun costo senza approvazione |
+| 5 | Accesso al repository LunArt: branch dedicato, worktree separato, test completi, PR revisionabile, nessun merge |
+| 6 | Core: percorso meno invasivo, strategia documentata (`docs/CORE-STRATEGIA.md`) |
+
+## 5. Cosa è stato costruito
+
+| Pezzo | Dove |
+|---|---|
+| Server della console (`node server/console/index.js`) | `server/console/` |
+| Persone e strutture | `data/console.js` (`CONSOLE_OPERATORS`, `CONSOLE_PROPERTIES`) |
+| Passkey (WebAuthn) | `server/console/auth.js`, libreria `@simplewebauthn/server` 13.3.3; nel browser `@simplewebauthn/browser` 13.3.0 (copiata in `assets/vendor/`) |
+| Ruoli e permessi, elenco delle rotte inoltrate | `server/console/permissions.js` |
+| Chiamate alle strutture con credenziale lato server | `server/console/upstream.js` |
+| Notifiche: relay firmato + push | `server/relay.js` (strutture), `server/console/notify.js` (console) |
+| Archivio della console: file, Postgres o memoria | `server/console/store.js` |
+| Registro azioni | `server/console/audit.js` |
+| L'app: la stessa Staff App in modalità console | `src/staff/app.js` + `console.html`, `console-sw.js` |
+| Lato strutture: credenziale della console, ritiro del token condiviso, relay | `server/app.js`, `server/config.js`, `server/push.js` (Bella Vigna); PR LunArt #6 |
+| Test | `test/console.test.mjs` (33), browser `tools/qa-console.mjs` |
+| Avvio locale completo | `node tools/console-local.mjs` |
+
+### Ruoli
+
+| | Front desk (Diego) | Direzione (Valentina) | Titolare (Jacopo) |
+|---|---|---|---|
+| Oggi, ordini (conferma, rifiuto, preparazione, consegna, contatto) | ✓ | ✓ | ✓ |
+| Prenotazioni: inserire, modificare, link guida, email al singolo ospite, annullare | ✓ | ✓ | ✓ |
+| Sincronizzazione: vedere, leggere le notifiche | ✓ | ✓ | ✓ |
+| Annullare un ordine (può rimborsare), rimborsi, riconciliazione rimborsi | — | ✓ + passkey | ✓ + passkey |
+| Invii email massivi (catch-up, email in scadenza) | — | ✓ + passkey | ✓ + passkey |
+| Riparazione, recupero storico, iCal, alert, controlli integrazioni, registro | — | ✓ | ✓ |
+| Accessi: inviti, recupero, revoche | — | — | ✓ + passkey |
+
+"+ passkey" = conferma con la passkey negli ultimi 5 minuti, oltre alla conferma
+esplicita in pagina. Credenziali, chiavi di pagamento e configurazioni economiche
+**non sono nella console**: sono variabili d'ambiente dei servizi, gestite solo da chi
+amministra l'hosting.
+
+### Sicurezza, in breve
+
+- Ogni richiesta è verificata sul server: sessione, ruolo, struttura. La console
+  inoltra solo un elenco fisso di rotte, ricostruite dalla propria tabella.
+- Le credenziali delle strutture restano sul server della console: mai al browser,
+  mai nei log, mai nelle risposte (verificato dai test).
+- Una struttura che risponde come un'altra viene rifiutata (indirizzo sbagliato in
+  configurazione = errore, non dati nel posto sbagliato).
+- Sessioni: cookie `__Host-` HttpOnly, Secure, SameSite=Strict; 72 ore di inattività,
+  14 giorni al massimo. Richieste di modifica solo dalla stessa origine. CSP stretta,
+  nessuno script inline, niente framing.
+- Le notifiche arrivano solo a chi lavora per quella struttura.
+
+## 6. Recupero dell'accesso
+
+1. **Prevenzione**: ognuno registra due passkey (telefono e computer) dalla schermata
+   *Accesso → Aggiungi un altro dispositivo*, oppure usa una passkey sincronizzata
+   (portachiavi iCloud o Google): perdere il telefono non chiude fuori.
+2. **Telefono perso (Diego o Valentina)**: il titolare, da *Accesso → Persone*, preme
+   *Telefono perso*: ottiene un link valido 24 ore, una sola volta, da consegnare a voce
+   o di persona. Quando la persona lo usa, tutte le sue vecchie passkey vengono
+   revocate e i dispositivi disconnessi. Le singole passkey si possono anche revocare
+   subito.
+3. **Titolare senza più passkey**: con l'accesso all'hosting si legge
+   `CONSOLE_SETUP_CODE` nelle impostazioni del servizio console, si usa *Primo accesso o
+   ripristino* sulla pagina di accesso, e poi si cambia il codice. Il codice vale solo
+   per il titolare, è limitato a 5 tentativi l'ora e ogni uso finisce nel registro.
+
+## 7. Il token condiviso: sostituzione progressiva
+
+1. Oggi: ogni struttura accetta il proprio `STAFF_TOKEN` (la vecchia Staff App).
+2. Si aggiunge `CONSOLE_SERVICE_TOKEN` (solo la console lo conosce): funziona insieme al
+   token condiviso, nessuno si ferma.
+3. Tutti passano alla console e attivano le notifiche lì.
+4. `STAFF_TOKEN_RETIRED=1`: il token condiviso smette di funzionare, `/staff` porta alla
+   console. Si torna indietro togliendo la variabile.
+
+Ogni passo su LunArt in produzione è un cambio di configurazione da approvare, dopo il
+merge (approvato) della PR #6.

@@ -14,7 +14,7 @@
 import { brand } from '../data/brand.js';
 import { cardPartners, stayPartners } from '../commerce/partners.js';
 
-export function renderPreviewIndex({ origin, links = [], escapeHtml }) {
+export function renderPreviewIndex({ origin, links = [], escapeHtml, consoleUrl = '' }) {
   /** Only a partner with a real, agreed benefit has a scanner page. */
   const scanners = [...stayPartners(), ...cardPartners()]
     .filter((partner, index, all) => all.findIndex((p) => p.partner_id === partner.partner_id) === index);
@@ -121,7 +121,8 @@ export function renderPreviewIndex({ origin, links = [], escapeHtml }) {
 
   <h2>Lo staff</h2>
   <ul>
-    ${link(`${origin}/staff`, brand.staffName, 'Chiede il token dell’anteprima la prima volta')}
+    ${consoleUrl ? link(consoleUrl, 'Staff App unica (LunArt · Bella Vigna)', 'Accesso con passkey: quella che userà lo staff') : ''}
+    ${link(`${origin}/staff`, `${brand.staffName} (banco di prova)`, 'La vecchia app di questa sola struttura, con il token dell’anteprima')}
   </ul>
 
   <h2>I locali</h2>
