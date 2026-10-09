@@ -54,7 +54,7 @@ revisione: **`/?review=1`** sull'anteprima (invisibile agli ospiti).
 |---|---|---|
 | D1 | **Accordi partner per Bella Vigna**: Opera Caffè (30% LunArt), Le Firme (10% Privilege), Blue Velvet (lista ≤15 € + 20% tavoli) — validi anche per BV? come riconoscono l'ospite? | `commerce/partners.js` → `PROPERTY_AGREEMENTS[id].status = 'confirmed'` (uno per partner). Con almeno un partner Privilege confermato la Privilege Card torna acquistabile da sola |
 | D2 | **Prezzi** di ogni servizio per Bella Vigna (oggi tutti `placeholder` = prezzi LunArt) | `commerce/prices.js` → `status: 'confirmed'` riga per riga; un prezzo non confermato non viene venduto in produzione |
-| D3 | Quali servizi esistono davvero a BV: colazione/brunch in camera, vino in camera, parrucchiere (professionista e orari), celebration (fornitore), transfer NCC e bagagli (fornitore, cutoff, cancellazione) | Prezzi (D2), `commerce/schedule.js` per gli orari del parrucchiere, voci `hair-in-room`, `celebration-in-room`, `breakfast-room`, `transfer` |
+| D3 | Quali servizi esistono davvero a BV: colazione/brunch in camera (sono prodotti dell'Opera Caffè, il cui accordo per BV è ancora da confermare: oggi vendibili solo in staging), vino in camera, parrucchiere (professionista e orari), celebration (fornitore), transfer NCC e bagagli (fornitore, cutoff, cancellazione) | Prezzi (D2), `commerce/schedule.js` per gli orari del parrucchiere, voci `hair-in-room`, `celebration-in-room`, `breakfast-room`, `transfer` |
 | D4 | Testo del vantaggio Opera Caffè per BV una volta confermato | `data/entries/breakfast.js` → `opera-benefit` |
 
 ## E. Decisioni di pubblicazione

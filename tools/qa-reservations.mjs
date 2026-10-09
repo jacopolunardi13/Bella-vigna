@@ -11,14 +11,33 @@
  *   3. Diego opens the Staff app on a phone: the queues, a reservation, the
  *      synchronisation screen, and the notification state.
  *
+ * At Bella Vigna the card lengths are offered and the card is not: no venue has
+ * confirmed its agreement for this property yet, so the Privilege upgrade is
+ * withheld and a guest is told so (see qa-commerce for the whole of that state).
+ *
  * Needs the preview server, which seeds two invented reservations:
  *   npm run dev &
  *   npm install --no-save playwright && node tools/qa-reservations.mjs
+ *
+ * With `STAFF_TOKEN` set on the server, pass the same value in the environment:
+ *   BASE_URL=http://localhost:4173 STAFF_TOKEN=… node tools/qa-reservations.mjs
  */
 import { chromium, devices } from 'playwright';
 import { mkdir, readdir } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { rooms as publishedRooms } from '../data/rooms.js';
+import { ROOM_IDS, roomIdFor } from '../commerce/rooms.js';
+
+/**
+ * Bella Vigna's rooms have names — Standard, Deluxe, Terrazza — where LunArt's had
+ * numbers, and one of them is said differently in English ("Terrace"). So a room on
+ * screen is read back through the same registry the guide renders from, rather than
+ * by stripping it down to its digits.
+ */
+const ROOM = 'Deluxe';
+const SPARE_ROOM = 'Terrazza';
+const roomOnScreen = (text) => roomIdFor(String(text ?? '').replace(/^\s*(camere|camera|rooms|room)\s+/i, '').trim());
 
 const OUT = new URL('.qa-screens/', import.meta.url).pathname;
 const BASE = (process.env.BASE_URL ?? 'http://localhost:4173').replace(/\/$/, '');
@@ -86,13 +105,13 @@ const inDays = (n) => new Date(Date.now() + n * 86_400_000).toISOString().slice(
  */
 const made = await post('/api/staff/reservations', {
   first_name: 'Controllo', last_name: `Qa${Date.now().toString(36).slice(-4)}`, guest_email: 'qa@example.invalid',
-  check_in: today, check_out: inDays(3), room: '303', adults: 2, booking_reference: `QA-${Date.now()}`,
+  check_in: today, check_out: inDays(3), room: ROOM, adults: 2, booking_reference: `QA-${Date.now()}`,
 });
 note(made.ok === true, 'a reservation can be created for this run');
 
 const spare = await post('/api/staff/reservations', {
   first_name: 'Annullata', last_name: `Qx${Date.now().toString(36).slice(-4)}`, guest_email: 'qa2@example.invalid',
-  check_in: inDays(4), check_out: inDays(6), room: '305', adults: 2, booking_reference: `QA-X-${Date.now()}`,
+  check_in: inDays(4), check_out: inDays(6), room: SPARE_ROOM, adults: 2, booking_reference: `QA-X-${Date.now()}`,
 });
 
 const chosen = made.reservation;
@@ -121,14 +140,14 @@ note((await page.locator('[data-phase]').count()) === 0, 'and does not ask a que
 const roomsOnScreen = await page.evaluate(() => [...document.querySelectorAll('#main .room')]
   .filter((el) => el.checkVisibility({ contentVisibilityAuto: true, visibilityProperty: true }))
   .map((el) => el.querySelector('.room__number')?.textContent.trim()));
-note(roomsOnScreen.length === 1, `one room on the home, not five (${roomsOnScreen.length})`);
-note(roomsOnScreen[0]?.includes(chosen.room), `and it is theirs (${roomsOnScreen[0]})`);
+note(roomsOnScreen.length === 1, `one room on the home, not all ${publishedRooms.length} (${roomsOnScreen.length})`);
+note(roomOnScreen(roomsOnScreen[0]) === chosen.room, `and it is theirs (${roomsOnScreen[0]})`);
 note((await page.locator('#fold-rooms').count()) === 0,
   'and the other rooms are not offered as a catalogue anywhere on it');
 // The records are untouched — what changed is which one this guide renders.
 const roomRecords = await page.evaluate(async () => (await import('/data/rooms.js')).rooms.map((r) => r.number));
-note(roomRecords.length === 5,
-  `while all five rooms remain in the data layer (${roomRecords.join(', ')})`);
+note(roomRecords.length === publishedRooms.length && roomRecords.join() === ROOM_IDS.join(),
+  `while every room remains in the data layer (${roomRecords.join(', ')})`);
 
 /* Short on screen, whole underneath. */
 const shape = await page.evaluate(() => ({
@@ -176,7 +195,7 @@ await page.screenshot({ path: `${OUT}/personal-390.png` });
 
 /* The Pass: free with the stay, on the home, before anything has been bought. */
 await page.screenshot({ path: `${OUT}/personal-top-390.png` });
-note(await page.isVisible('[data-pass]'), 'a LunArt Pass is on the home without anything being bought');
+note(await page.isVisible('[data-pass]'), 'a Bella Vigna Pass is on the home without anything being bought');
 const pass = await page.evaluate(() => ({
   tier: document.querySelector('[data-pass]')?.className ?? '',
   state: document.querySelector('[data-pass]')?.dataset.state ?? '',
@@ -187,9 +206,17 @@ const pass = await page.evaluate(() => ({
 note(!/privilege/.test(pass.tier), `and it is the free tier, not Privilege (${pass.tier.trim()})`);
 note(['active', 'not-started'].includes(pass.state), `with a state the stay decides (${pass.state})`);
 note(pass.text.includes(chosen.room), 'it carries the room');
-note(pass.benefits >= 1, `what the stay includes is listed on it (${pass.benefits})`);
-note(/opera caff/i.test(pass.section), 'the Opera Caffè benefit is one of them');
-note(!/privilege/i.test(pass.section.split(/opera/i)[0] ?? ''), 'and it is not sold as a Privilege benefit');
+/* At LunArt the stay includes the Opera Caffè 30%, listed under the card. At Bella
+   Vigna that agreement is LunArt's and is not yet confirmed for this house, so the
+   Pass promises nothing it cannot keep: no benefit row, no venue, no breakfast (it
+   depends on the booking's rate), and no Privilege pitch for an upgrade that is not
+   on sale. What it does carry is whose card it is and for which dates. */
+note(pass.benefits === 0, `no benefit is listed as included while no agreement is confirmed (${pass.benefits})`);
+note(!/opera caff/i.test(pass.section), 'the Opera Caffè benefit is not promised');
+note(!/colazione|breakfast/i.test(pass.section), 'nor breakfast, which depends on the rate booked');
+note(!/privilege/i.test(pass.section), 'and nothing on it sells an upgrade that is not on sale');
+note(/Bella Vigna/.test(pass.section) && /valid|valida/i.test(pass.section),
+  `it says what it is: the Bella Vigna guest card, for the booking's dates (${(pass.section.split('\n').filter(Boolean).at(-1) ?? '').slice(0, 70)})`);
 
 /* ── 2. The card, inside the stay ─────────────────────────────────────── */
 console.log('\n── the card inside the stay ──');
@@ -197,9 +224,16 @@ console.log('\n── the card inside the stay ──');
 await page.goto(`${link.link}#/product/privilege-card`, { waitUntil: 'networkidle' });
 await page.waitForTimeout(900);
 
-note(await page.isVisible('.product-form'), 'the card sheet opens');
-const lengths = await page.locator('.chip--choice').allTextContents();
-note(lengths.length >= 1, `the card lengths on offer (${lengths.length})`);
+/* The lengths and start days a stay allows are still worked out by the server —
+   they are the shape of the stay, and the day a venue confirms they are what the
+   form will offer. The sheet itself sells nothing at Bella Vigna yet: it opens,
+   says why, and shows no form, no lengths and no price. */
+const sheet = (await page.textContent('.sheet__body').catch(() => '')).replace(/\s+/g, ' ').trim();
+note(sheet.length > 0, 'the card sheet opens');
+note(/nessun locale ha ancora confermato|no venue has confirmed/i.test(sheet),
+  `on a personal link too, it says why the card is not on sale (${(sheet.match(/(Non è ancora in vendita|Not on sale yet)[^.]*\./)?.[0] ?? 'missing').slice(0, 70)})`);
+note((await page.locator('.sheet__body .product-form, .sheet__body [data-add]').count()) === 0,
+  'with no form and no basket button');
 
 const stayDays = await page.evaluate(async () => {
   const token = location.pathname.split('/').pop();
@@ -207,16 +241,12 @@ const stayDays = await page.evaluate(async () => {
   return { days: context.stay_days, options: context.cardOptions };
 });
 const fits = stayDays.options.map((option) => option.days);
+note(fits.length >= 1, `the server still works out the lengths this stay could take (${fits.join(', ')})`);
 note(fits.every((days) => days <= stayDays.days.length),
-  `only the lengths that fit are offered (${fits.join(', ')} within ${stayDays.days.length} days)`);
-
-// Every date the picker offers is a day of this stay, the checkout day included.
-const offered = await page.locator('select[name="date"] option').evaluateAll(
-  (options) => options.map((option) => option.value).filter(Boolean),
-);
-note(offered.length > 0, `start dates are offered (${offered.length})`);
-note(offered.every((date) => stayDays.days.includes(date)), 'and every one of them is inside the stay');
-note(offered.every((date) => date <= stayDays.days.at(-1)), 'none of them past the checkout day');
+  `only the lengths that fit (${fits.join(', ')} within ${stayDays.days.length} days)`);
+const starts = stayDays.options.flatMap((option) => option.startDates ?? []);
+note(starts.length > 0 && starts.every((date) => stayDays.days.includes(date)),
+  `and every start day is a day of this stay (${starts.length})`);
 await page.screenshot({ path: `${OUT}/card-stay-390.png` });
 
 /* ── 3. Lost link recovery ────────────────────────────────────────────── */
@@ -242,25 +272,28 @@ note(recovered?.includes('/g/'), 'and hand back the personal link');
 await page.screenshot({ path: `${OUT}/recover-390.png` });
 
 /* ── 4. The Staff app ─────────────────────────────────────────────────── */
-console.log('\n── LunArt Staff ──');
+console.log('\n── Bella Vigna Staff ──');
 
 const staffPage = await context.newPage();
 const staffErrors = [];
 staffPage.on('pageerror', (e) => staffErrors.push(String(e)));
 staffPage.on('console', (m) => { if (m.type() === 'error' && isRealError(m.text())) staffErrors.push(m.text()); });
 
-await staffPage.goto(`${BASE}/staff`, { waitUntil: 'networkidle' });
-await staffPage.waitForTimeout(900);
-
 /* With a token on the server, the app asks for it before it shows anything — the
-   way Diego meets it on a new phone — and the token typed once opens it. */
+   way Diego meets it on a new phone — and the token typed once opens it. Loaded to
+   `load` rather than `networkidle` in that case: the app reads the 401's status
+   and never its body, and Playwright counts an unread body as still in flight. */
+await staffPage.goto(`${BASE}/staff`, { waitUntil: STAFF_TOKEN ? 'load' : 'networkidle' });
 if (STAFF_TOKEN) {
+  await staffPage.waitForSelector('#gate', { state: 'visible', timeout: 8000 }).catch(() => {});
   note(await staffPage.isVisible('#gate'), 'the staff app asks for its token before showing anything');
+  note((await staffPage.locator('#main .grid, [data-reservation]').count()) === 0, 'and shows no reservation or count behind the gate');
   await staffPage.fill('#token', STAFF_TOKEN);
   await staffPage.click('#enter');
-  await staffPage.waitForTimeout(1200);
+  await staffPage.waitForSelector('#main .grid', { timeout: 8000 }).catch(() => {});
   note(await staffPage.isHidden('#gate'), 'and the token opens it');
 }
+await staffPage.waitForTimeout(900);
 
 note(await staffPage.isVisible('.bar'), 'the staff app opens');
 note((await staffPage.locator('.tab').count()) >= 7, 'every section has a tab');
@@ -357,6 +390,17 @@ note(
   (repairStatus === 401) === (dashboardStatus === 401),
   `the repair endpoint is guarded like the rest of the staff API (repair ${repairStatus}, dashboard ${dashboardStatus})`,
 );
+/* With a token on the server, both of those were asked without it — so the guard is
+   only proved if the same dashboard opens for the token, and stays shut for one
+   that is not it. */
+if (STAFF_TOKEN) {
+  const [withToken, wrongToken] = await Promise.all([
+    fetch(`${BASE}/api/staff/dashboard`, { headers: staffAuth }).then((r) => r.status),
+    fetch(`${BASE}/api/staff/dashboard`, { headers: { authorization: `Bearer ${STAFF_TOKEN}-not` } }).then((r) => r.status),
+  ]);
+  note(dashboardStatus === 401 && withToken === 200 && wrongToken === 401,
+    `the staff API opens for the token and nothing else (none ${dashboardStatus}, token ${withToken}, wrong ${wrongToken})`);
+}
 
 await staffPage.click('[data-sync="repair"]');
 await staffPage.waitForTimeout(1400);
@@ -381,7 +425,7 @@ await staffPage.screenshot({ path: `${OUT}/staff-repair-390.png` });
 const notDue = await post('/api/staff/reservations', {
   first_name: 'Futura', last_name: `F6x${Date.now().toString(36).slice(-4)}`,
   guest_email: 'qa-notdue@example.invalid',
-  check_in: inDays(42), check_out: inDays(45), room: '301', adults: 2,
+  check_in: inDays(42), check_out: inDays(45), room: 'Standard', adults: 2,
   booking_reference: `QA-NOTDUE-${Date.now()}`,
 });
 const notDueRow = notDue;
@@ -444,19 +488,23 @@ note(bare.length === 0, `no full address is printed (${bare.slice(0, 2).join(', 
 note(armed === 0 || masked.length > 0,
   `each row carries a masked address instead (${masked.slice(0, 2).join(', ') || 'no rows'})`);
 
-/* Guarded like every other staff route, and refusing without a confirmation. */
+/* Guarded like every other staff route, and refusing without a confirmation.
+   The refusals are asked *with* the staff token when there is one: a 401 would
+   only prove the guard, and what is under test is that a signed-in Diego still
+   cannot send by accident. A 401 is accepted only when no token was given. */
+const refusedAs = (status, expected) => expected.includes(status) || (!STAFF_TOKEN && status === 401);
 const [previewStatus, sendStatus, confirmlessStatus] = await Promise.all([
   fetch(`${BASE}/api/staff/sync/guide-catchup`).then((r) => r.status),
-  fetch(`${BASE}/api/staff/sync/guide-catchup`, { method: 'POST' }).then((r) => r.status),
+  fetch(`${BASE}/api/staff/sync/guide-catchup`, { method: 'POST', headers: staffAuth }).then((r) => r.status),
   fetch(`${BASE}/api/staff/sync/guide-catchup`, {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ confirm: 'yes' }),
+    method: 'POST', headers: { 'content-type': 'application/json', ...staffAuth }, body: JSON.stringify({ confirm: 'yes' }),
   }).then((r) => r.status),
 ]);
 note((previewStatus === 401) === (dashboardStatus === 401),
   `the catch-up preview is guarded like the rest of the staff API (${previewStatus})`);
-note(sendStatus === 422 || sendStatus === 401,
+note(refusedAs(sendStatus, [422]),
   `a send with no body is refused rather than performed (${sendStatus})`);
-note(confirmlessStatus === 422 || confirmlessStatus === 401,
+note(refusedAs(confirmlessStatus, [422]),
   `and so is a send whose confirmation is not the word true (${confirmlessStatus})`);
 
 /* ── Reconciling a refund made on another Stripe account ───────────────────
@@ -476,18 +524,18 @@ note(/revoca la Privilege Card/.test(refundText), 'and that it revokes the card'
 note(await staffPage.isVisible('[data-refund-reconcile]'), 'the action is offered to staff');
 
 const reconcilePost = (body) => fetch(`${BASE}/api/staff/orders/refund-reconcile`, {
-  method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+  method: 'POST', headers: { 'content-type': 'application/json', ...staffAuth }, body: JSON.stringify(body),
 });
 const [noOrderStatus, unknownStatus, unconfirmedStatus] = await Promise.all([
   reconcilePost({ confirm: true }).then((r) => r.status),
   reconcilePost({ order: 'NOSUCHREF', confirm: true }).then((r) => r.status),
   reconcilePost({ order: 'NOSUCHREF' }).then((r) => r.status),
 ]);
-note(noOrderStatus === 422 || noOrderStatus === 401,
+note(refusedAs(noOrderStatus, [422]),
   `an unnamed order is refused (${noOrderStatus})`);
-note(unknownStatus === 404 || unknownStatus === 401,
+note(refusedAs(unknownStatus, [404]),
   `an order nobody holds is refused (${unknownStatus})`);
-note(unconfirmedStatus === 404 || unconfirmedStatus === 422 || unconfirmedStatus === 401,
+note(refusedAs(unconfirmedStatus, [404, 422]),
   `and nothing is written without a confirmation (${unconfirmedStatus})`);
 
 /* Never reachable as a guest, whatever the path looks like. */
@@ -547,21 +595,26 @@ await page.screenshot({ path: `${OUT}/cancelled-390.png` });
 
 /* ── 6. One room each, and only that room ─────────────────────────────────
    The owner's rule: a personal guide shows the room the guest is in, and never a
-   catalogue of the others. Every room LunArt lets is checked, because a rule that
-   holds for 303 and quietly fails for 301 is not a rule. The records all stay in
-   data/rooms.js — the guest in 302 needs 302 — so this asserts what is rendered,
-   not what exists. */
+   catalogue of the others. Every room Bella Vigna lets is checked, because a rule
+   that holds for the Deluxe and quietly fails for the Terrazza is not a rule. The
+   records all stay in data/rooms.js — the guest in the Standard needs the Standard
+   — so this asserts what is rendered, not what exists.
+
+   And the photographs with it: at LunArt it was room 304's bathroom, confirmed by
+   the owner, against the desk-and-window shot that belongs to 302. Here each room
+   wears its own pictures from the property's page (rooms/standard-*, deluxe-*,
+   terrazza-*) and nothing from another room or from the house's own pictures. */
 console.log('\n── one room each ──');
 
-const ALL_ROOMS = ['301', '302', '303', '304', '305'];
 const throwaway = [];
+const prefixOf = (id) => `rooms/${id.toLowerCase()}-`;
 
-for (const number of ALL_ROOMS) {
+for (const id of ROOM_IDS) {
   const stay = await post('/api/staff/reservations', {
-    first_name: 'Camera', last_name: `R${number}x${Date.now().toString(36).slice(-4)}`,
-    guest_email: `qa-${number}@example.invalid`,
-    check_in: today, check_out: inDays(2), room: number, adults: 2,
-    booking_reference: `QA-ROOM-${number}-${Date.now()}`,
+    first_name: 'Camera', last_name: `R${id.slice(0, 3)}x${Date.now().toString(36).slice(-4)}`,
+    guest_email: `qa-${id.toLowerCase()}@example.invalid`,
+    check_in: today, check_out: inDays(2), room: id, adults: 2,
+    booking_reference: `QA-ROOM-${id.toUpperCase()}-${Date.now()}`,
   });
   throwaway.push(stay.reservation.id);
   const { link } = await post(`/api/staff/reservations/${stay.reservation.id}/link`);
@@ -571,38 +624,54 @@ for (const number of ALL_ROOMS) {
 
   const shown = await page.evaluate(() => ({
     // Every room rendered anywhere in the page, open or folded.
-    numbers: [...document.querySelectorAll('#main .room')]
-      .map((el) => el.querySelector('.room__number')?.textContent.replace(/\D/g, '')).filter(Boolean),
+    labels: [...document.querySelectorAll('#main .room')]
+      .map((el) => el.querySelector('.room__number')?.textContent.trim()).filter(Boolean),
     catalogue: document.querySelectorAll('#fold-rooms').length,
     phaseChips: document.querySelectorAll('[data-phase]').length,
+    photos: [...document.querySelectorAll('.room--assigned img, .room--assigned source')]
+      .flatMap((el) => (el.getAttribute('srcset') || el.getAttribute('src') || '').split(','))
+      .map((entry) => entry.trim().split(/\s+/)[0]).filter(Boolean),
   }));
+  const ids = shown.labels.map(roomOnScreen);
 
-  note(shown.numbers.length === 1 && shown.numbers[0] === number,
-    `${number} → only ${number} is shown (${shown.numbers.join(', ') || 'none'})`);
-  note(shown.catalogue === 0, `${number} → the other rooms are not offered as a catalogue`);
-  note(shown.phaseChips === 0, `${number} → no manual phase selector`);
+  note(ids.length === 1 && ids[0] === id,
+    `${id} → only ${id} is shown (${shown.labels.join(', ') || 'none'})`);
+  note(shown.catalogue === 0, `${id} → the other rooms are not offered as a catalogue`);
+  note(shown.phaseChips === 0, `${id} → no manual phase selector`);
+
+  const own = publishedRooms.find((room) => room.id === id).photos.map((photo) => photo.src);
+  const joined = shown.photos.join(' ');
+  note(own.every((src) => joined.includes(src)),
+    `${id} → shows its own ${own.length} photographs (${own.map((src) => src.split('/').pop()).join(', ')})`);
+  note(shown.photos.length > 0 && shown.photos.every((src) => src.includes(prefixOf(id))),
+    `${id} → and nothing from another room or from the house’s own pictures (${shown.photos.filter((src) => !src.includes(prefixOf(id))).slice(0, 2).join(', ') || 'none'})`);
+  if (id === 'Terrazza') await page.screenshot({ path: `${OUT}/room-terrazza-390.png` });
 }
 
-/* ── A booking across four rooms ──────────────────────────────────
-   Booking.com sold seven adults the whole floor — 302, 303, 304 and 305 on one
-   booking number — and the guide greeted them with "Camera 305", the first number
-   in the notification. What is checked here is that nothing on the page now names
-   one of the four as the room: the header says all of them, no single room card is
-   presented as theirs, and the Staff list says Camere rather than Camera. */
-console.log('\n── one booking, four rooms ──');
+/* ── A booking across every room ──────────────────────────────────────────
+   At LunArt, Booking.com sold seven adults the whole floor — 302, 303, 304 and 305
+   on one booking number — and the guide greeted them with "Camera 305", the first
+   number in the notification. Bella Vigna has three rooms, and a family or a group
+   of friends taking the whole house is the same booking: Standard, Deluxe and
+   Terrazza on one number. What is checked is that nothing on the page names one of
+   them as the room: the header says all of them — in the guest's language, where
+   the Terrazza is the "Terrace" — no single room card is presented as theirs, and
+   the Staff list says Camere rather than Camera. */
+console.log('\n── one booking, the whole house ──');
 
 const group = await post('/api/staff/reservations', {
-  first_name: 'Gruppo', last_name: `G4x${Date.now().toString(36).slice(-4)}`,
+  first_name: 'Gruppo', last_name: `G3x${Date.now().toString(36).slice(-4)}`,
   guest_email: 'qa-group@example.invalid',
-  check_in: today, check_out: inDays(2), adults: 7,
-  /* The one Camera field, which normalises a list without needing a new control. */
-  room: '305, 302, 303, 304',
+  check_in: today, check_out: inDays(2), adults: 6,
+  /* The one Camera field, which normalises a list without needing a new control —
+     typed out of order and in the channel's own words, to prove both. */
+  room: 'Terrazza, standard, Deluxe',
   booking_reference: `QA-GROUP-${Date.now()}`,
 });
 throwaway.push(group.reservation.id);
 
-note(Array.isArray(group.reservation.rooms) && group.reservation.rooms.join(',') === '302,303,304,305',
-  `the booking holds all four rooms (${(group.reservation.rooms ?? []).join(', ') || 'none'})`);
+note(Array.isArray(group.reservation.rooms) && group.reservation.rooms.join(',') === ROOM_IDS.join(','),
+  `the booking holds all three rooms, in the house's order (${(group.reservation.rooms ?? []).join(', ') || 'none'})`);
 note(!group.reservation.room,
   `and names none of them as the room (${JSON.stringify(group.reservation.room)})`);
 
@@ -612,13 +681,13 @@ await page.waitForTimeout(900);
 
 const groupLine = (await page.textContent('.stay__line')).replace(/\s+/g, ' ').trim();
 /* The guide follows the browser's language, so either plural form is the right
-   answer here — what must never appear is the singular with one of the four. */
-note(/Camere 302, 303, 304 e 305|Rooms 302, 303, 304 and 305/.test(groupLine),
-  `the guide names all four rooms (${groupLine})`);
-note(!/\b(Camera|Room) 30\d\b/.test(groupLine), 'and never one of them as "Camera 305"');
+   answer here — what must never appear is the singular with one of the three. */
+note(/Camere Standard, Deluxe e Terrazza|Rooms Standard, Deluxe and Terrace/.test(groupLine),
+  `the guide names all three rooms (${groupLine})`);
+note(!/\b(Camera|Room) (Standard|Deluxe|Terrazza|Terrace)\b/.test(groupLine), 'and never one of them as "Camera Terrazza"');
 
 const groupRooms = await page.evaluate(() => [...document.querySelectorAll('#main .room')]
-  .map((el) => el.querySelector('.room__number')?.textContent.replace(/\D/g, '')).filter(Boolean));
+  .map((el) => el.querySelector('.room__number')?.textContent.trim()).filter(Boolean));
 note(groupRooms.length === 0,
   `no single room is presented as theirs (${groupRooms.join(', ') || 'none'})`);
 
@@ -629,35 +698,46 @@ note(groupRooms.length === 0,
 const quietOrder = await post('/api/checkout', {
   guideToken: groupLink.split('/g/')[1], lang: 'it',
   customer: { name: 'Gruppo QA', email: 'qa-group@example.invalid' },
-  lines: [{ productId: 'light-breakfast', quantity: 1, date: inDays(2), slotId: 'b-0900', room: '303' }],
+  lines: [{ productId: 'light-breakfast', quantity: 1, date: inDays(2), slotId: 'b-0900', room: 'Deluxe' }],
 });
 note(Boolean(quietOrder.accessToken), `a room from the group can be ordered to (${quietOrder.error ?? 'ok'})`);
 
+/* A room outside the booking is refused. The whole house leaves no room outside
+   it, so the same rule is asked of a two-room stay — Standard and Terrazza — with
+   the breakfast sent to the Deluxe, which is a real room and not theirs. */
+const pair = await post('/api/staff/reservations', {
+  first_name: 'Coppia', last_name: `G2x${Date.now().toString(36).slice(-4)}`,
+  guest_email: 'qa-pair@example.invalid',
+  check_in: today, check_out: inDays(2), adults: 4, room: 'Standard, Terrazza',
+  booking_reference: `QA-PAIR-${Date.now()}`,
+});
+throwaway.push(pair.reservation.id);
+const pairLink = (await post(`/api/staff/reservations/${pair.reservation.id}/link`)).link;
 const wrongRoom = await fetch(`${BASE}/api/checkout`, {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify({
-    guideToken: groupLink.split('/g/')[1], lang: 'it',
-    customer: { name: 'Gruppo QA', email: 'qa-group@example.invalid', room: '301' },
-    lines: [{ productId: 'light-breakfast', quantity: 1, date: inDays(2), slotId: 'b-0900', room: '301' }],
+    guideToken: pairLink.split('/g/')[1], lang: 'it',
+    customer: { name: 'Coppia QA', email: 'qa-pair@example.invalid', room: 'Deluxe' },
+    lines: [{ productId: 'light-breakfast', quantity: 1, date: inDays(2), slotId: 'b-0900', room: 'Deluxe' }],
   }),
 });
 const wrongBody = await wrongRoom.json().catch(() => ({}));
 note(wrongRoom.status === 422 && wrongBody.error === 'room-not-in-reservation',
-  `a room outside the group is refused (${wrongRoom.status} ${wrongBody.error ?? ''})`);
+  `a room outside the booking is refused (${wrongRoom.status} ${wrongBody.error ?? ''})`);
 
-/* And the Staff list, which is where the owner saw "Camera 305 · 7 ospiti". */
+/* And the Staff list, which is where the LunArt owner saw "Camera 305 · 7 ospiti". */
 await staffPage.goto(`${BASE}/staff`, { waitUntil: 'networkidle' });
 await staffPage.waitForTimeout(700);
 await staffPage.click('[data-view="reservations"]');
 await staffPage.waitForTimeout(900);
 const groupRow = (await staffPage.locator(`[data-reservation="${group.reservation.id}"]`).textContent())
   .replace(/\s+/g, ' ').trim();
-note(/Camere 302, 303, 304 e 305/.test(groupRow), `Staff says Camere (${groupRow.slice(0, 90)})`);
-note(/7 ospiti/.test(groupRow), 'with the real number of guests');
-note(!/Camera 30\d · 7 ospiti/.test(groupRow), 'and never "Camera 305 · 7 ospiti"');
+note(/Camere Standard, Deluxe e Terrazza/.test(groupRow), `Staff says Camere (${groupRow.slice(0, 90)})`);
+note(/6 ospiti/.test(groupRow), 'with the real number of guests');
+note(!/Camera (Standard|Deluxe|Terrazza) · 6 ospiti/.test(groupRow), 'and never "Camera Terrazza · 6 ospiti"');
 
-/* A four-room booking is not a reservation missing its room. */
+/* A three-room booking is not a reservation missing its room. */
 await staffPage.click('[data-view="sync"]');
 await staffPage.waitForTimeout(900);
 const syncRows = await staffPage.evaluate(() => [...document.querySelectorAll('.row')]
@@ -665,25 +745,6 @@ const syncRows = await staffPage.evaluate(() => [...document.querySelectorAll('.
 note(!syncRows.some((text) => /Gruppo/.test(text) && /no-room/.test(text)),
   'the sync screen does not list it as missing a room');
 await staffPage.screenshot({ path: `${OUT}/staff-multiroom-390.png` });
-
-/* Room 304 shows its own bathroom — the owner's confirmed photograph — and never
-   the desk-and-window shot, which is room 302's and is already in room 302. */
-const r304 = await post('/api/staff/reservations', {
-  first_name: 'Foto', last_name: `F304x${Date.now().toString(36).slice(-4)}`, guest_email: 'qa-304@example.invalid',
-  check_in: today, check_out: inDays(2), room: '304', adults: 2, booking_reference: `QA-304-${Date.now()}`,
-});
-throwaway.push(r304.reservation.id);
-const link304 = (await post(`/api/staff/reservations/${r304.reservation.id}/link`)).link;
-await page.goto(link304, { waitUntil: 'networkidle' });
-await page.waitForTimeout(900);
-const photos304 = await page.evaluate(() => [...document.querySelectorAll('.room--assigned img, .room--assigned source')]
-  .map((el) => el.getAttribute('src') || el.getAttribute('srcset') || '').join(' '));
-for (const shot of ['304-letto', '304-testiera', '304-finestra', '304-bagno']) {
-  note(photos304.includes(shot), `304 shows its confirmed ${shot}`);
-}
-note(!/304-camera|302-camera|property\/|views\//.test(photos304),
-  'and nothing from another room or from the house\u2019s own pictures');
-await page.screenshot({ path: `${OUT}/room-304-390.png` });
 
 /* ── 7. The phase, computed and not asked ─────────────────────────────────
    A link carries check-in, check-out and today's date, so the guide already knows
@@ -701,7 +762,7 @@ for (const phase of PHASES) {
   const stay = await post('/api/staff/reservations', {
     first_name: 'Fase', last_name: `P${phase.expect}x${Date.now().toString(36).slice(-4)}`,
     guest_email: `qa-${phase.expect}@example.invalid`,
-    check_in: phase.from, check_out: phase.to, room: '303', adults: 2,
+    check_in: phase.from, check_out: phase.to, room: ROOM, adults: 2,
     booking_reference: `QA-PHASE-${phase.expect}-${Date.now()}`,
   });
   throwaway.push(stay.reservation.id);
@@ -733,14 +794,22 @@ note((await page.locator('[data-phase]').count()) === 3,
   'the public guide still asks, because nothing has told it');
 
 /* ── 8. WhatsApp is messaged, the telephone is called ──────────────────────
-   One WhatsApp Business line and one telephone, and they are different numbers.
+   One WhatsApp Business line and the telephones, and they are different numbers.
    A wa.me link to Diego sends a guest to a chat nobody staffs; a tel: link to the
    WhatsApp line promises a call that cannot connect. This walks the rendered page
-   rather than the data, because the data was right before and the markup was not. */
+   rather than the data, because the data was right before and the markup was not.
+
+   At Bella Vigna the WhatsApp line is LunArt's own — one Business account, Diego on
+   the other end of both houses — so every link to it has to start the message by
+   naming Bella Vigna, or the person answering cannot tell which house is asking.
+   And there are two people to call: Diego at the front desk, and Valentina for the
+   management. */
 console.log('\n── WhatsApp and telephone ──');
 
 const OFFICIAL = '393925661488';
 const DIEGO = '393342115505';
+const MANAGEMENT = '393296860909';
+const namesTheHouse = (href) => /Bella Vigna/.test(new URL(href).searchParams.get('text') ?? '');
 
 const links = async (where) => page.evaluate(() => [...document.querySelectorAll('a[href]')]
   .map((a) => a.getAttribute('href'))
@@ -755,7 +824,8 @@ const telLinks = helpLinks.filter((h) => h.startsWith('tel:'));
 note(waLinks.length > 0, `the help view offers WhatsApp (${waLinks.length})`);
 note(waLinks.every((h) => h.includes(OFFICIAL)),
   `and every WhatsApp link is the official line (${[...new Set(waLinks)].join(', ')})`);
-note(!waLinks.some((h) => h.includes(DIEGO)), 'no WhatsApp link goes to Diego');
+note(!waLinks.some((h) => h.includes(DIEGO) || h.includes(MANAGEMENT)), 'no WhatsApp link goes to Diego or Valentina');
+note(waLinks.every(namesTheHouse), 'and every one opens with Bella Vigna named, because the line is shared with LunArt');
 note(!telLinks.some((h) => h.replace(/\D/g, '').includes(OFFICIAL)),
   `the WhatsApp line is never dialled (${telLinks.join(', ') || 'no tel links'})`);
 note(telLinks.some((h) => h.replace(/\D/g, '').includes(DIEGO)),
@@ -771,8 +841,10 @@ const sheetWa = sheetLinks.filter((l) => l.href.includes('wa.me'));
 const sheetTel = sheetLinks.filter((l) => l.href.startsWith('tel:'));
 note(sheetWa.length > 0 && sheetWa.every((l) => l.href.includes(OFFICIAL)),
   `the contacts sheet messages the official line (${sheetWa.map((l) => l.href).join(', ')})`);
-note(sheetTel.length > 0 && sheetTel.every((l) => l.href.replace(/\D/g, '').includes(DIEGO)),
-  `and calls Diego (${sheetTel.map((l) => l.href).join(', ')})`);
+note(sheetWa.every((l) => namesTheHouse(l.href)), 'naming the house before the question');
+const dialled = sheetTel.map((l) => l.href.replace(/\D/g, ''));
+note(dialled.includes(DIEGO) && dialled.includes(MANAGEMENT) && dialled.every((n) => n === DIEGO || n === MANAGEMENT),
+  `and calls a person — Diego, or Valentina for the management (${sheetTel.map((l) => l.href).join(', ')})`);
 
 // The Concierge hands over when it does not know; it must hand over to the line.
 await page.goto(`${BASE}/`, { waitUntil: 'networkidle' });
@@ -786,7 +858,8 @@ const handoff = await page.evaluate(() => [...document.querySelectorAll('.concie
   .map((a) => a.getAttribute('href')).filter((h) => /wa\.me|^tel:/.test(h)));
 note(handoff.length > 0 && handoff.every((h) => h.includes(OFFICIAL)),
   `the Concierge hands over to the official line (${handoff.join(', ') || 'nothing offered'})`);
-note(!handoff.some((h) => h.includes(DIEGO)), 'and not to somebody\u2019s mobile');
+note(!handoff.some((h) => h.includes(DIEGO) || h.includes(MANAGEMENT)), 'and not to somebody\u2019s mobile');
+note(handoff.every(namesTheHouse), 'with Bella Vigna named in the message it opens');
 
 note(errors.length === 0, `no page errors in the guide (${errors.slice(0, 2).join(' | ') || 'none'})`);
 

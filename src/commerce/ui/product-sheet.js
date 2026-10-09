@@ -25,6 +25,7 @@ import { cardStartDates, cardVariantsForStay } from '../../../commerce/stay.js';
 import { guestStay, guest } from '../../guest.js';
 import * as cart from '../cart.js';
 import { ROOM_INPUT } from '../../../commerce/rooms.js';
+import { cardPartners } from '../../../commerce/partners.js';
 
 const ERROR_TEXT = {
   it: {
@@ -177,7 +178,13 @@ function fieldsFor(product, lang, values = {}) {
 }
 
 function body(product, lang) {
-  const purchasable = product.status !== 'coming-soon' && product.purchaseMode !== 'request-only';
+  /**
+   * The rail under Privilege, said on the sheet as well as on the shop tile and at
+   * the checkout: with no venue honouring the card there is no form, no lengths
+   * and no total to look at, only the reason.
+   */
+  const withoutVenue = Boolean(product.requiresPartners) && cardPartners().length === 0;
+  const purchasable = product.status !== 'coming-soon' && product.purchaseMode !== 'request-only' && !withoutVenue;
   const range = priceRange(product);
   const firstVariant = product.variants?.[0]?.id ?? null;
   const includes = product.includes?.[lang] ?? product.includes?.it;
@@ -212,7 +219,8 @@ function body(product, lang) {
 
   const notPurchasable = `
     <div class="notice">
-      <p>${esc(product.status === 'coming-soon' ? UI[lang].comingSoonBody : UI[lang].onRequestBody)}</p>
+      <p>${esc(withoutVenue ? UI[lang].noCardPartnerBody
+    : product.status === 'coming-soon' ? UI[lang].comingSoonBody : UI[lang].onRequestBody)}</p>
     </div>
     <div class="actions">
       <button class="action action--primary" type="button" data-entry="contacts">

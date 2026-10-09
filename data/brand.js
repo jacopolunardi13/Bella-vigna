@@ -113,10 +113,13 @@ export const brand = {
     it: {
       passNote: 'Compresa nel soggiorno: è la tua carta d’ospite Bella Vigna, valida per le date della prenotazione.',
       passNotePrivilege: 'La tua Pass, con i vantaggi Privilege sbloccati per le date della prenotazione.',
+      // The network is LunArt's and none of it is agreed for Bella Vigna yet.
+      partnerNetworkBlurb: 'La rete di locali di Firenze: un vantaggio diventa utilizzabile quando l’accordo vale anche per Bella Vigna.',
     },
     en: {
       passNote: 'Included with your stay: your Bella Vigna guest card, valid for the dates of your booking.',
       passNotePrivilege: 'Your Pass, with the Privilege benefits unlocked for the dates of your booking.',
+      partnerNetworkBlurb: 'A network of Florence venues: a benefit becomes usable once the agreement covers Bella Vigna too.',
     },
   },
 };

@@ -247,14 +247,14 @@ note(!/€\s?\d|\d\s?€/.test(tileText), 'with no price on the tile');
 
 await page.goto(`${BASE}#/product/privilege-card`, { waitUntil: 'networkidle' });
 await page.waitForTimeout(600);
-await page.check('input[name="variantId"][value="5d"]', { force: true });
-await page.fill('input[name="date"]', today);
-await page.fill('input[name="field:holderName"]', 'Jacopo Lunardi');
-await page.waitForTimeout(400);
-const cardSummary = (await page.textContent('[data-summary]')).replace(/\s+/g, ' ').trim();
-note(/non è ancora acquistabile|not on sale yet/i.test(cardSummary),
-  `the sheet says it is not on sale yet (${cardSummary.slice(0, 50)})`);
-note(await page.locator('[data-add]').isDisabled(), 'and it cannot go in the basket, even with every field filled in');
+// The sheet says why, and offers nothing to fill in: no lengths, no prices, no
+// total and no basket button for a card that no venue honours yet.
+const cardSheet = (await page.textContent('.sheet__body').catch(() => '')).replace(/\s+/g, ' ').trim();
+note(/nessun locale ha ancora confermato|no venue has confirmed/i.test(cardSheet),
+  `the sheet says why it is not on sale (…${cardSheet.match(/(Non è ancora in vendita|Not on sale yet)[^.]*\./)?.[0] ?? 'missing'})`);
+note((await page.locator('.sheet__body form.product-form, .sheet__body input[name="variantId"], .sheet__body [data-add]').count()) === 0,
+  'and shows no form, no card lengths and no basket button');
+note(!/€\s?\d|\d\s?€/.test(cardSheet), 'and no price at all');
 await page.screenshot({ path: `${OUT}/card-withheld-390.png` });
 
 // Not only the button: the checkout behind it refuses the line as well, so a
@@ -286,8 +286,12 @@ await page.waitForTimeout(400);
 console.log('\n── partner pages ──');
 const venue = await context.newPage();
 for (const id of pending) {
-  await venue.goto(`${BASE}partner/${id}`, { waitUntil: 'networkidle' });
-  await venue.waitForTimeout(700);
+  // Not `networkidle`: the page reads the 404's status and never its body, and
+  // Playwright counts an unread body as a request still in flight.
+  await venue.goto(`${BASE}partner/${id}`, { waitUntil: 'load' });
+  await venue.waitForFunction(() => document.getElementById('partner-name')?.textContent.trim() !== '—', null, { timeout: 8000 })
+    .catch(() => {});
+  await venue.waitForTimeout(300);
   const venueName = (await venue.textContent('#partner-name')).trim();
   note(/sconosciuto/i.test(venueName), `${id} → the page does not present itself as that venue's scanner (${venueName})`);
   note((await venue.locator('link[rel="manifest"]').count()) === 0, `${id} → and offers no home-screen install`);

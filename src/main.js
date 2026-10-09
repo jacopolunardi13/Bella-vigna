@@ -23,8 +23,8 @@ import { openSearch, closeSearch, isSearchOpen } from './ui/search.js';
 import { loadBrandMark } from './ui/brand.js';
 import * as concierge from './concierge/ui.js';
 import { loadGuest, refreshGuest, tokenFromPath, guest, isPersonal } from './guest.js';
-import { PHASES, getEntry } from '../data/index.js';
-import { storageKey } from '../data/brand.js';
+import { PHASES, getEntry, OFFICIAL_WHATSAPP } from '../data/index.js';
+import { storageKey, whatsappHref } from '../data/brand.js';
 
 const PHASE_KEY = storageKey('phase');
 const VIEWS = { guide: homeView, florence: florenceView, help: helpView };
@@ -152,6 +152,10 @@ function render() {
   main.scrollTop = 0;
 
   document.documentElement.lang = state.lang;
+  // The static footer follows the language too: its WhatsApp link opens on the
+  // shared line naming the house in the guest's language, and its labels translate.
+  for (const link of document.querySelectorAll('[data-whatsapp]')) link.href = whatsappHref(OFFICIAL_WHATSAPP, state.lang);
+  for (const label of document.querySelectorAll('[data-it][data-en]')) label.textContent = label.dataset[state.lang];
   $('#lang-toggle').textContent = state.lang === 'it' ? 'EN' : 'IT';
   $('#lang-toggle').setAttribute('aria-label',
     state.lang === 'it' ? 'Switch to English' : 'Passa all’italiano');

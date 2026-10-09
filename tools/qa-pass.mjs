@@ -12,18 +12,34 @@
  * stay opens the same link and still finds the purchase. That is only true because
  * the server, not localStorage, is what remembers.
  *
+ * At Bella Vigna the Pass comes with the stay exactly as at LunArt, and everything
+ * about it is walked here — the card, its artwork and legibility, its sheet, its
+ * states, a cancelled stay, the purchases under it. What cannot be walked is the
+ * Privilege upgrade: the partner venues are LunArt's, none has yet confirmed an
+ * agreement that covers Bella Vigna guests (`PROPERTY_AGREEMENTS`), so no benefit
+ * is claimable and the upgrade is withheld everywhere, preview included. Every
+ * check that used to buy it now checks that withholding instead — on the screen and
+ * at the checkout — and the upgraded card, its QR and the venue's verdict are left
+ * to the unit tests, which prove them against a property fixture
+ * (test/pass.test.mjs, test/privilege-card.test.mjs, test/card.test.mjs,
+ * test/card-qr-slot.test.mjs, test/partners.test.mjs).
+ *
  *   npm run dev &
- *   npm run qa:pass
+ *   npm run qa:pass        (BASE_URL and STAFF_TOKEN are read from the environment)
  */
 import { chromium, devices } from 'playwright';
 import { readdir } from 'node:fs/promises'; import { existsSync } from 'node:fs'; import { join } from 'node:path';
+import { brand, storageKey } from '../data/brand.js';
 async function launch(){try{return await chromium.launch()}catch(e){const r=process.env.PLAYWRIGHT_BROWSERS_PATH;for(const d of (await readdir(r)).filter(x=>x.startsWith('chromium-'))){const p=join(r,d,'chrome-linux','chrome');if(existsSync(p))return chromium.launch({executablePath:p})}throw e}}
 const B=(process.env.BASE_URL??'http://localhost:4173').replace(/\/$/,'');
 // The staff routes are guarded whenever the server has a token: present it, from the environment.
 const STAFF_TOKEN=process.env.STAFF_TOKEN??'';
 const post=(p,b={})=>fetch(`${B}${p}`,{method:'POST',headers:{'content-type':'application/json',...(STAFF_TOKEN&&p.startsWith('/api/staff/')?{authorization:`Bearer ${STAFF_TOKEN}`}:{})},body:JSON.stringify(b)}).then(r=>r.json());
 const inDays=n=>new Date(Date.now()+n*864e5).toISOString().slice(0,10);
-const made=await post('/api/staff/reservations',{first_name:'Flow',last_name:`F${Date.now().toString(36).slice(-4)}`,guest_email:'f@example.invalid',check_in:inDays(30),check_out:inDays(33),room:'303',adults:2,booking_reference:`FLOW-${Date.now()}`});
+/** Bella Vigna's rooms have names; and what the browser keeps, it keeps under `bellavigna.`. */
+const ROOM='Deluxe';
+const KEYS={cart:storageKey('cart.v1'),pending:storageKey('checkout-pending.v1'),orders:storageKey('orders.v1')};
+const made=await post('/api/staff/reservations',{first_name:'Flow',last_name:`F${Date.now().toString(36).slice(-4)}`,guest_email:'f@example.invalid',check_in:inDays(30),check_out:inDays(33),room:ROOM,adults:2,booking_reference:`FLOW-${Date.now()}`});
 const {link}=await post(`/api/staff/reservations/${made.reservation.id}/link`);
 const b=await launch(); const ctx=await b.newContext({...devices['iPhone 13'],locale:'it-IT'}); const page=await ctx.newPage();
 const errs=[]; page.on('pageerror',e=>errs.push(String(e)));
@@ -43,10 +59,10 @@ if (await dateInput.count()) { await dateInput.fill(new Date(Date.now()+31*864e5
 const slot = page.locator('.product-form select').last();
 if (await slot.count()) { const opts = await slot.locator('option').all(); if (opts.length>1) await slot.selectOption({index:1}); await page.waitForTimeout(400); }
 const room = page.locator('.product-form [name="room"]');
-if (await room.count()) await room.fill('303').catch(()=>{});
+if (await room.count()) await room.fill(ROOM).catch(()=>{});
 await page.locator('.product-form button[type="submit"], [data-add]').first().click().catch(()=>{});
 await page.waitForTimeout(1200);
-const inCart = await page.evaluate(()=>JSON.parse(localStorage.getItem('lunart.cart.v1')||'[]').length);
+const inCart = await page.evaluate((k)=>JSON.parse(localStorage.getItem(k)||'[]').length, KEYS.cart);
 step('the bottle is in the basket', inCart>0, `${inCart} line(s)`);
 
 // Check out.
@@ -63,11 +79,11 @@ await page.waitForTimeout(3000);
 step('and come back to the guide', page.url().includes('/g/')||page.url().includes('#/order/'), page.url().slice(0,70));
 await page.waitForTimeout(2500);
 
-const after = await page.evaluate(()=>({
-  cart: JSON.parse(localStorage.getItem('lunart.cart.v1')||'[]').length,
-  pending: localStorage.getItem('lunart.checkout-pending.v1'),
+const after = await page.evaluate((k)=>({
+  cart: JSON.parse(localStorage.getItem(k.cart)||'[]').length,
+  pending: localStorage.getItem(k.pending),
   body: document.body.innerText,
-}));
+}), KEYS);
 step('the basket is empty', after.cart===0, `${after.cart} line(s)`);
 step('and the pending marker is consumed', after.pending===null);
 step('the order is not still "in attesa di pagamento"', !/in attesa di pagamento/i.test(after.body));
@@ -100,16 +116,20 @@ step('the Pass has a plate behind it', Boolean(plate.url), plate.url ?? 'no back
 /**
  * And it says whose card it is.
  *
- * The painting that preceded this one had the LA lock-up at its centre, so the card
- * deliberately did not repeat it. "Il movimento e la stratificazione di Firenze" is
- * an abstract and carries no mark, so without this the card is a beautiful rectangle
- * with a stranger's name on it.
+ * At LunArt the painting carried no mark, so the card printed the LA lock-up. Bella
+ * Vigna's plate is the terrace and its vines — no mark in it either — so the card
+ * wears the property's own gold mark (`brand.mark`), the same file as the header.
+ * And nothing on it may be LunArt's: a second house's card with the first house's
+ * picture is the leak this guards.
  */
 const mark = await page.evaluate(() => {
   const img = document.querySelector('[data-pass] .pass__mark');
-  return img ? { src: img.getAttribute('src'), decoded: img.naturalWidth > 0 } : null;
+  return img ? { src: img.getAttribute('src'), alt: img.getAttribute('alt'), decoded: img.naturalWidth > 0 } : null;
 });
-step('and the LunArt mark on it', mark?.decoded === true, mark?.src ?? 'absent');
+step('and the Bella Vigna mark on it', mark?.decoded === true && mark?.src === brand.mark && mark?.alt === brand.name,
+  `${mark?.src ?? 'absent'} · alt ${mark?.alt}`);
+step('and nothing on the card is LunArt\u2019s', !/lunart/i.test(`${plate.url} ${mark?.src}`) && plate.url?.includes('bella-vigna-pass'),
+  `${plate.url?.split('/').pop()} · ${mark?.src?.split('/').pop()}`);
 /** Whatever the artwork is, every other card face has to be wearing the same one. */
 const STANDARD_PLATE = plate.url?.match(/[^/]+\.webp/)?.[0] ?? '';
 step('and the plate is a real image, not the server’s fallback page',
@@ -127,48 +147,54 @@ const sheet = await page.evaluate(() => ({
   benefits: document.querySelectorAll('.sheet .benefit').length,
   partners: document.querySelectorAll('.sheet .partner:not(.partner--network)').length,
   labels: [...document.querySelectorAll('.sheet .pass__label')].map((e) => e.textContent.trim()),
+  sections: [...document.querySelectorAll('.sheet .pass__label')].map((e) => e.dataset.section ?? ''),
   locked: document.querySelectorAll('.sheet .partner[data-access="locked"]').length,
   available: document.querySelectorAll('.sheet .partner[data-access="available"]').length,
   headlines: [...document.querySelectorAll('.sheet .benefit__headline')].map((e) => e.textContent.trim()),
+  /** Blue Velvet: one venue with two benefits at LunArt. */
+  blueVelvet: (() => {
+    const card = document.querySelector('.sheet .partner--network[data-partner="blue-velvet"]');
+    return card ? { status: card.dataset.status, benefits: card.querySelectorAll('.benefit').length,
+      soon: card.querySelector('.partner__soon')?.textContent.trim() ?? '' } : null;
+  })(),
   text: document.querySelector('.sheet')?.innerText ?? '',
   hash: location.hash,
 }));
 step('tapping the Pass opens a view of its own', sheet.open && sheet.cardInSheet===1, sheet.title);
 step('it names the holder, the room and the validity',
-  sheet.facts.length>=3 && /305|30\d/.test(sheet.facts.join(' ')), sheet.facts.join(' · ').slice(0,90));
-step('and lists what the Pass is good for', sheet.benefits>0, `${sheet.benefits}`);
+  sheet.facts.length>=3 && /Flow/.test(sheet.facts.join(' ')) && sheet.facts.some((f)=>f.includes(ROOM)),
+  sheet.facts.join(' · ').slice(0,90));
 step('with a URL the back button can close', sheet.hash==='#/pass', sheet.hash);
 
-/* ── What a standard-Pass guest sees of Privilege ──────────────────────────
-   This guest has not upgraded. The benefits reserved for Privilege are real and
-   are not theirs, and the thing being checked is that they can still be found:
-   shown, dimmed, named as an upgrade, with the ordinary product sheet as the way
-   to get them. Hiding them would make the Privilege tile in the shop an
-   abstraction, and nobody buys an abstraction.
-
-   On its own reservation, because the one above arrives in a month: a Pass that
-   has not started is correctly "nothing is claimable yet", which is a different
-   screen and is checked further down. The guest who needs to discover Privilege is
-   the one standing in Florence tonight. */
-step('the Pass sheet separates what comes with the stay from what Privilege adds',
-  sheet.labels.length===3 && sheet.labels.slice(0,2).join(' | ')==='Incluso nel tuo soggiorno LunArt | Vantaggi Privilege',
-  sheet.labels.join(' | '));
+/* ── What the Pass is good for, at Bella Vigna today ──────────────────────
+   At LunArt the sheet listed what the stay includes (the Opera Caffè 30%) and,
+   under it, the Privilege benefits a standard guest could discover, dimmed and
+   marked as an upgrade. At Bella Vigna neither exists yet: the agreements are
+   LunArt's, and until a venue confirms one for this house there is nothing to
+   claim and nothing to upgrade to. So the sheet must not pretend otherwise — no
+   benefit card, no headline that reads as an offer, no padlock and no sentence
+   telling a guest to show a card — and the network is still there, as one list of
+   businesses being set up, so the guest knows what is coming. */
+step('the Pass sheet has no stay-benefit and no Privilege section, only the network',
+  sheet.sections.join(',')==='network' && sheet.benefits===0 && sheet.partners===0,
+  `${sheet.labels.join(' | ')} · ${sheet.benefits} benefits, ${sheet.partners} benefit cards`);
 step('a Pass that has not started yet offers nothing as claimable today',
   sheet.locked===0 && sheet.available===0, `${sheet.locked} locked, ${sheet.available} available`);
-step('the benefit is what the eye lands on, not the venue',
-  ['10% di sconto','€15 MAX + DRINK','20% OFF'].every((h)=>sheet.headlines.includes(h)),
-  sheet.headlines.join(' · '));
-step('Blue Velvet is one venue with two benefits', sheet.partners===3 && sheet.benefits===4,
-  `${sheet.partners} venues, ${sheet.benefits} benefits`);
-step('the "show your card" sentence is said once for the section, not per venue',
-  (sheet.text.match(/Mostra la tua LunArt Privilege/g)??[]).length<=1);
+step('no benefit headline and no discount figure reads as an offer',
+  sheet.headlines.length===0 && !/\d+\s*%|€\s?\d|\d\s?€/.test(sheet.text),
+  sheet.headlines.join(' · ') || 'none');
+step('Blue Velvet, two benefits at LunArt, is listed with none: being set up',
+  sheet.blueVelvet?.status==='activating' && sheet.blueVelvet?.benefits===0 && /in attivazione/i.test(sheet.blueVelvet?.soon ?? ''),
+  JSON.stringify(sheet.blueVelvet));
+step('and nobody is told to show a card that cannot be bought',
+  !/Mostra la tua|Disponibile con|si sbloccano con/i.test(sheet.text));
 step('and no internal partner note is anywhere in the Pass',
-  !/ingressi adiacenti|listino/i.test(sheet.text) && /14R–16R/.test(sheet.text),
-  'address kept, operational note gone');
+  !/ingressi adiacenti|listino|attivo per LunArt|accordo LunArt|da confermare/i.test(sheet.text) && /14R–16R/.test(sheet.text),
+  'address kept, operational note and agreement status gone');
 await page.screenshot({path:'tools/.qa-screens/pass-sheet.png'});
 
 console.log('');
-const today = await post('/api/staff/reservations',{first_name:'Live',last_name:`L${Date.now().toString(36).slice(-4)}`,guest_email:'l@example.invalid',check_in:inDays(0),check_out:inDays(2),room:'304',adults:2,booking_reference:`LIVE-${Date.now()}`});
+const today = await post('/api/staff/reservations',{first_name:'Live',last_name:`L${Date.now().toString(36).slice(-4)}`,guest_email:'l@example.invalid',check_in:inDays(0),check_out:inDays(2),room:'Terrazza',adults:2,booking_reference:`LIVE-${Date.now()}`});
 const liveLink = (await post(`/api/staff/reservations/${today.reservation.id}/link`)).link;
 
 /**
@@ -227,6 +253,23 @@ async function passSheetAt(width, url = liveLink) {
         .filter((e) => e.scrollWidth > e.clientWidth + 1).length,
       pageScroll: document.documentElement.scrollWidth > window.innerWidth + 1,
       text: sheet.innerText,
+      sections: [...sheet.querySelectorAll('.pass__label')].map((e) => e.dataset.section ?? ''),
+      privilegeSection: Boolean(head),
+      plate: getComputedStyle(sheet.querySelector('[data-pass]'), '::before').backgroundImage.match(/[^/]+\.webp/)?.[0] ?? '',
+      facts: [...sheet.querySelectorAll('.pass-facts__row')].map((r) => r.innerText.replace(/\s+/g, ' ').trim()),
+      /* The card face and its facts at this width: every line inside the card, and
+         no fact cut off — the place a long state word or a room name would break. */
+      faceFits: (() => {
+        const card = sheet.querySelector('[data-pass]');
+        if (!card) return false;
+        const box = card.getBoundingClientRect();
+        return [...card.querySelectorAll('p, span, img')].every((el) => {
+          const r = el.getBoundingClientRect();
+          return r.top >= box.top - 0.5 && r.bottom <= box.bottom + 0.5 && r.left >= box.left - 0.5 && r.right <= box.right + 0.5;
+        });
+      })(),
+      factsClipped: [...sheet.querySelectorAll('.pass-facts__row dt, .pass-facts__row dd')]
+        .filter((e) => e.scrollWidth > e.clientWidth + 1).length,
 
       /* ── The network, as one list ──────────────────────────────────────── */
       network: (() => {
@@ -247,6 +290,9 @@ async function passSheetAt(width, url = liveLink) {
             return cards.filter((c) => c.compareDocumentPosition(turn) & Node.DOCUMENT_POSITION_FOLLOWING).length;
           })(),
           names: cards.map((c) => c.querySelector('.partner__name')?.textContent.trim() ?? ''),
+          directions: cards.map((c) => ({ id: c.dataset.partner,
+            address: c.querySelector('.partner__meta')?.textContent.trim() ?? '',
+            links: [...c.querySelectorAll('.partner__directions')].map((a) => a.getAttribute('href')) })),
           badges: list.querySelectorAll('.partner__soon').length,
           logos: logos.length,
           logosDecoded: logos.filter((i) => i.naturalWidth > 0).length,
@@ -281,68 +327,84 @@ async function passSheetAt(width, url = liveLink) {
 }
 
 /* ── A guest whose stay has not started ────────────────────────────────────
-   The screen Irene actually had. Checked before the upgrade and after it, because
-   the reported bug was that the two looked the same. */
+   The screen Irene actually had, at LunArt: checked before the upgrade and after
+   it, because the reported bug was that the two looked the same. At Bella Vigna
+   there is no upgrade to look the same as, and what is checked is that none is
+   offered — no card section, no padlocked venue, no button to buy. */
 {
   const { probe, read } = await passSheetAt(390, link);
   step('before arrival a standard Pass has no card section', read.cardActions===0 && !read.cardLabel,
     read.cardLabel || 'none');
-  step('and the Privilege partners are still offered, marked as an upgrade',
-    read.lockWords.length===2 && read.unavailable===3,
-    `${read.lockWords.length} marked, ${read.unavailable} not usable yet`);
-  step('with the purchase reachable before arrival, not only on the day',
-    read.buy===1, `${read.buy} button(s)`);
+  step('and no Privilege venue is offered as an upgrade, since none has an agreement',
+    !read.privilegeSection && read.lockWords.length===0 && read.privilegeVenues===0,
+    `${read.lockWords.length} marked, ${read.privilegeVenues} under Privilege`);
+  step('with nothing to buy before arrival either', read.buy===0, `${read.buy} button(s)`);
   await probe.close();
 }
 
 {
   const { probe, read } = await passSheetAt(390);
   step('a guest in-house has an active Pass', read.state==='active', read.state);
-  step('what comes with the stay is usable with no upgrade at all', read.available>=1,
-    `${read.available} available`);
-  step('and the Privilege partners are still discovered, locked', read.locked===2,
-    `${read.locked} locked, ${read.unavailable} unavailable`);
-  step('each one marked as an upgrade rather than removed',
-    read.lockWords.length===2 && read.lockWords.every((w)=>/Disponibile con LunArt Privilege/.test(w)),
-    read.lockWords.join(' | '));
-  step('with one line saying what Privilege is, instead of a pitch per venue',
-    /si sbloccano con LunArt Privilege/.test(read.lead), read.lead.slice(0,64));
-  step('and the way to get it is the ordinary product sheet, not a second checkout',
-    read.buy===1, `${read.buy} button(s)`);
-  step('a standard guest keeps the stay first and Privilege under it',
-    /soggiorno/i.test(read.labels[0]??''), read.labels.join(' | '));
-  step('Opera Caffè is never drawn inside the Privilege section',
-    read.privilegeVenues===2 && !/opera/i.test(read.privilegeText),
+  step('and still nothing is presented as claimable, with no agreement behind it',
+    read.available===0 && read.locked===0 && read.benefits===0,
+    `${read.available} available, ${read.locked} locked, ${read.benefits} benefits`);
+  step('nothing is marked as an upgrade, and no line pitches Privilege',
+    read.lockWords.length===0 && read.lead==='' && !/Disponibile con|si sbloccano con/.test(read.text),
+    read.lockWords.join(' | ') || read.lead || 'none');
+  step('and there is no way to buy it from the Pass', read.buy===0, `${read.buy} button(s)`);
+  step('the facts come first, then the network, and nothing between them',
+    read.sections.join(',')==='network' && read.facts.length===4, `${read.facts.join(' · ').slice(0, 80)} | ${read.sections.join(',')}`);
+  step('Opera Caffè is never drawn as a benefit: it is in the network, being set up',
+    read.privilegeVenues===0 && !/opera/i.test(read.privilegeText) && /Opera Caff/.test(read.network?.text ?? '')
+      && /L’Opera Caffè[\s\S]{0,120}in attivazione/i.test(read.network?.text ?? ''),
     `${read.privilegeVenues} venues under Privilege`);
-  step('each Privilege venue has one set of directions, built from its address',
-    read.directions.length===2
-      && new Set(read.directions).size===2
-      && read.directions.every((h)=>h.startsWith('https://www.google.com/maps/dir/?api=1&destination=')),
-    read.directions.map((h)=>h.slice(-30)).join(' | '));
-  await probe.screenshot({path:'tools/.qa-screens/pass-privilege-locked.png', fullPage:true});
+  /* One way there per venue: built from the address printed on the card, or the
+     venue's own verified pin — never a second link, never a guessed place. */
+  step('each venue has at most one set of directions, built from its own address',
+    (() => {
+      const cards = read.network?.directions ?? [];
+      const built = (c) => c.links[0].startsWith('https://www.google.com/maps/dir/?api=1&destination=')
+        && new URL(c.links[0]).searchParams.get('destination') === c.address;
+      const pinned = (c) => /^https:\/\/(maps\.app\.goo\.gl|www\.google\.com\/maps)\//.test(c.links[0]);
+      return cards.length > 0 && cards.every((c) => c.links.length <= 1)
+        && cards.filter((c) => c.links.length === 1).every((c) => built(c) || pinned(c))
+        && cards.some((c) => c.links.length === 1 && built(c));
+    })(),
+    `${(read.network?.directions ?? []).filter((c) => c.links.length).length} of ${(read.network?.directions ?? []).length} with directions`);
+  await probe.screenshot({path:'tools/.qa-screens/pass-network-inhouse.png', fullPage:true});
   await probe.close();
 }
 
-/* ── The partner blocks at every width a guest holds ───────────────────────
+/* ── The Pass sheet at every width a guest holds ───────────────────────────
    Four widths because the copy is real: "Via del Castello d'Altafronte 14R–16R,
-   Firenze" is a long line on a 360px phone, and a benefit headline that wraps off
-   the edge of its card is the failure this catches. 820 is in because the Pass is
-   already part of the tablet QA. */
+   Firenze" is a long line on a 360px phone, and "Terrazza" and "Non ancora attiva"
+   are longer than LunArt's room numbers. At LunArt this measured the benefit cards;
+   at Bella Vigna there are none, so it measures that there are none at any width,
+   that the card face holds every line, and that no fact is cut off. 820 is in
+   because the Pass is already part of the tablet QA. */
 for (const width of [360, 390, 430, 820]) {
   const { probe, read } = await passSheetAt(width);
-  step(`at ${width}px the partner cards fit and nothing is clipped`,
-    read.partners===3 && read.overflowing===0 && read.clipped===0 && !read.pageScroll,
-    `${read.partners} cards, ${read.overflowing} overflowing, ${read.clipped} clipped${read.pageScroll?', page scrolls sideways':''}`);
+  step(`at ${width}px the Pass sheet fits: face, facts, and no benefit card`,
+    read.partners===0 && read.faceFits && read.factsClipped===0 && read.clipped===0 && !read.pageScroll,
+    `${read.partners} benefit cards, face ${read.faceFits ? 'fits' : 'spills'}, ${read.factsClipped} facts clipped${read.pageScroll?', page scrolls sideways':''}`);
+  // Whatever the artwork is, every card face has to be wearing the same one.
+  step(`at ${width}px it wears the same artwork as the card on the home`, read.plate === STANDARD_PLATE && Boolean(STANDARD_PLATE),
+    `${read.plate} vs ${STANDARD_PLATE}`);
   if (width===360 || width===820) {
     await probe.screenshot({path:`tools/.qa-screens/pass-partners-${width}.png`, fullPage:true});
   }
+  /* The narrowest phone, with the in-house state and the longest room name: the
+     legibility measurement below, on the card a guest is holding tonight. */
+  if (width===360) await measureCard(probe, 'Pass, in-house at 360px');
   await probe.close();
 }
 
-/* ── The same stay, upgraded ───────────────────────────────────────────────
-   One reservation walked through all three states, because the states are about
-   the stay and not about three different guests: in-house without the upgrade,
-   in-house with it, then called off. */
+/* ── The same stay, offered the upgrade ────────────────────────────────────
+   At LunArt one reservation was walked through all three states — in-house without
+   the upgrade, in-house with it, then called off. At Bella Vigna the middle state
+   cannot be reached, and the check is that it cannot: the checkout behind the
+   product sheet refuses the card for the reason that is true, and the Pass the
+   guest already holds is unchanged by the attempt. */
 async function buyPrivilege(guideLink, { startIndex = 0 } = {}) {
   const token = guideLink.split('/g/')[1];
   const ctxJson = await (await fetch(`${B}/api/guide/${token}`)).json();
@@ -366,51 +428,46 @@ async function buyPrivilege(guideLink, { startIndex = 0 } = {}) {
   await fetch(`${B}/api/orders/${order.accessToken}`);
   return order;
 }
+/** Refused because no venue stands behind the card — not for a date, a price or a form. */
+const refusedForNoPartner = (order) => !order.accessToken && !order.checkoutUrl
+  && (order.errors ?? []).length > 0 && order.errors.every((e) => e.reason === 'no-card-partner');
 
 {
   const order = await buyPrivilege(liveLink);
-  step('Privilege can be bought on a stay that is already under way', Boolean(order.accessToken),
-    order.error ?? '');
+  step('Privilege cannot be bought on a stay that is already under way', refusedForNoPartner(order),
+    `${order.error ?? 'accepted'} ${(order.errors ?? []).map((e) => e.reason ?? e.code).join(', ')}`);
+  const guide = await (await fetch(`${B}/api/guide/${liveLink.split('/g/')[1]}`)).json();
+  step('and the server still holds the standard Pass, with no card and no entitlement',
+    guide.pass?.tier==='pass' && guide.pass?.card===null && (guide.pass?.entitlements ?? []).length===0,
+    `${guide.pass?.tier}, card ${JSON.stringify(guide.pass?.card)}, ${(guide.pass?.entitlements ?? []).join(',') || 'no entitlements'}`);
   const { probe, read } = await passSheetAt(390);
-  step('and then all three benefits are unlocked, with nothing locked',
-    read.available===3 && read.locked===0 && read.benefits===4,
-    `${read.available} available, ${read.locked} locked, ${read.benefits} benefits`);
-  step('a guest who paid for it is shown Privilege first', /privilege/i.test(read.labels[0]??''),
-    read.labels.join(' | '));
-  step('told once, for the section, how to use them',
-    /Mostra la tua LunArt Privilege attiva/.test(read.lead), read.lead.slice(0,60));
-  step('with nothing left to buy', read.buy===0, `${read.buy} button(s)`);
-  // `innerText` carries the rendered case, and the venue line is uppercased.
-  step('and the Privilege Card has a section of its own in the Pass',
-    /Privilege Card/i.test(read.cardLabel) && read.cardActions===1,
-    `${read.cardLabel} · ${read.cardActions} action(s)`);
-  step('whose button offers the code, because this card is live now',
-    read.cardState==='active' && /codice/i.test(read.cardAction),
-    `${read.cardState} · ${read.cardAction}`);
-  step('and Opera Caffè still on the stay side of the line',
-    /opera caff/i.test(read.text) && !/opera/i.test(read.privilegeText),
-    `in the sheet: ${/opera caff/i.test(read.text)}, inside Privilege: ${/opera/i.test(read.privilegeText)}`);
-  await probe.screenshot({path:'tools/.qa-screens/pass-privilege-unlocked.png', fullPage:true});
+  step('so the sheet after the attempt is the sheet before it',
+    read.state==='active' && read.cardActions===0 && !read.cardLabel && read.available===0 && read.buy===0,
+    `${read.state} · ${read.cardActions} card action(s) · ${read.available} available`);
+  await probe.screenshot({path:'tools/.qa-screens/pass-privilege-refused.png', fullPage:true});
   await probe.close();
 }
 
 /* ── The network, as a guest scrolls it ────────────────────────────────────
-   Thirty-two businesses in one list: three with an agreement, one rule, then the
-   twenty-nine being set up. The checks are about the list staying one list, the
-   marks staying undistorted, and nothing down there reading as an offer. */
+   Thirty-two businesses in one list. At LunArt: three with an agreement, one rule,
+   then the twenty-nine being set up. At Bella Vigna the three agreements are
+   LunArt's and not yet confirmed for this house, so all thirty-two sit after the
+   one turn, each saying it is being set up. The checks are about the list staying
+   one list, the marks staying undistorted, and nothing down there reading as an
+   offer. */
 {
   const { probe, read } = await passSheetAt(390);
   const n = read.network;
   step('the whole network is one list in the Pass', Boolean(n) && n.cards === 32,
     n ? `${n.cards} cards` : '(no network list)');
-  step('with the three agreements first and the rest after one turn',
-    n?.live === 3 && n?.soon === 29 && n?.turns === 1 && n?.beforeTurn === 3,
+  step('with no agreement confirmed for Bella Vigna, every one of them after the one turn',
+    n?.live === 0 && n?.soon === 32 && n?.turns === 1 && n?.beforeTurn === 0,
     `${n?.live} live, ${n?.soon} being set up, ${n?.turns} turn(s) after ${n?.beforeTurn}`);
-  step('in the order LunArt curated them',
+  step('in the order LunArt curated them, the three LunArt agreements still first',
     n?.names.slice(0, 5).join(' · ') === 'L’Opera Caffè · Le Firme · Blue Velvet · Babylon Club · La Petite'
       && n?.names.at(-1) === 'Sartoria Rossi',
     `${n?.names.slice(0, 4).join(' · ')} … ${n?.names.at(-1)}`);
-  step('each one being set up says so, once', n?.badges === 29, `${n?.badges} badge(s)`);
+  step('each one being set up says so, once', n?.badges === 32, `${n?.badges} badge(s)`);
   step('and nothing down there is a padlock, a price or a way to buy',
     !/In attivazione.*(sconto|€|%|Acquista|Mostra la card)/s.test(n?.text ?? '')
       && !/\d+\s*%/.test(n?.text ?? ''),
@@ -425,8 +482,8 @@ async function buyPrivilege(guideLink, { startIndex = 0 } = {}) {
       && (n?.text ?? '').includes('Le Firme'),
     'logo and name, not logo or name');
   step('a business with no agreement has no internal note on its card',
-    !/Mirko|Massimiliano|Mary|Mauro|Jacopo|confermare|confirm/i.test(n?.text ?? ''),
-    'contacts and uncertainty stay off the screen');
+    !/Mirko|Massimiliano|Mary|Mauro|Jacopo|confermare|confirm|attivo per LunArt|accordo LunArt/i.test(n?.text ?? ''),
+    'contacts, uncertainty and LunArt\u2019s own agreements stay off the screen');
 
   await probe.screenshot({ path: 'tools/.qa-screens/pass-network.png', fullPage: true });
   await probe.close();
@@ -442,67 +499,62 @@ for (const width of [360, 390, 430, 820]) {
   await probe.close();
 }
 
-/* ── A stay longer than the Privilege bought for it ────────────────────────
-   The hole this was written for. Privilege is sold by the day and a stay can be
-   longer than the card: six nights, two Privilege days starting the day after
-   tomorrow, and today the Pass is live while the card is not. Before the fix, all
-   six days read as usable, so the guide would have sent a guest to Le Firme on a
-   day the door would have turned them away — and the door would have been right,
-   because `validateCode` has always checked the card's own state. */
+/* ── A stay longer than any card ───────────────────────────────────────────
+   At LunArt: six nights, two Privilege days starting the day after tomorrow, and
+   the guide had to say the card had not started while the stay had. The hole that
+   matters at Bella Vigna is the other way round — whether some length and start
+   day slips past the rule — so each length this stay offers is tried on its first
+   and its last possible day, and every one is refused for the same reason. */
 {
   const longStay = await post('/api/staff/reservations', {
     first_name: 'Long', last_name: `L${Date.now().toString(36).slice(-4)}`,
     guest_email: 'l@example.invalid', check_in: inDays(0), check_out: inDays(6),
-    room: '305', adults: 2, booking_reference: `LONG-${Date.now()}`,
+    room: 'Standard', adults: 2, booking_reference: `LONG-${Date.now()}`,
   });
   const longLink = (await post(`/api/staff/reservations/${longStay.reservation.id}/link`)).link;
-  // Two days, starting two days from now: inside the stay, and not today.
-  const order = await buyPrivilege(longLink, { startIndex: 2 });
-  step('a two-day Privilege can be bought to start later in a longer stay',
-    Boolean(order.accessToken), order.error ?? '');
+  const longToken = longLink.split('/g/')[1];
+  const options = (await (await fetch(`${B}/api/guide/${longToken}`)).json()).cardOptions ?? [];
+  const attempts = [];
+  for (const option of options) {
+    for (const date of new Set([option.startDates?.[0], option.startDates?.at(-1)].filter(Boolean))) {
+      attempts.push(await post('/api/checkout', {
+        guideToken: longToken, lang: 'it',
+        customer: { name: 'QA Ospite', email: 'qa@example.invalid' },
+        lines: [{ productId: 'privilege-card', variantId: option.variantId, quantity: 1, date, fields: { holderName: 'QA Ospite' } }],
+      }));
+    }
+  }
+  step('no card length on any start day of a six-night stay gets past the rule',
+    options.length > 1 && attempts.length > 1 && attempts.every(refusedForNoPartner),
+    `${options.map((o) => o.variantId).join(', ')}: ${attempts.filter(refusedForNoPartner).length}/${attempts.length} refused for no-card-partner`);
 
+  const guide = await (await fetch(`${B}/api/guide/${longToken}`)).json();
+  step('the stay is live with no card behind it, so there is no code to issue',
+    guide.pass?.state==='active' && guide.pass?.card===null, `pass ${guide.pass?.state}, card ${JSON.stringify(guide.pass?.card)}`);
   const { probe, read } = await passSheetAt(390, longLink);
-  step('the stay is live and the card she bought has not started yet',
-    read.state==='active' && read.cardState==='not-started',
-    `pass ${read.state}, card ${read.cardState}`);
-  step('she still owns Privilege: the card is hers to open, and not sold to her again',
-    read.cardActions===1 && read.buy===0 && read.lockWords.length===0,
-    `${read.cardActions} card action(s), ${read.buy} buy button(s), ${read.lockWords.length} lock(s)`);
-  // One available across the whole sheet: Opera Caffè, which comes with the stay and
-  // asks for no entitlement. Both Privilege venues are not usable today.
-  step('but neither Privilege venue reads as usable today',
-    read.available===1 && read.unavailable===2,
-    `${read.available} available (the stay's own), ${read.unavailable} not usable`);
-  step('and it says the card is what has not started, not the stay she is standing in',
-    /Privilege Card è attiva/.test(read.lead) && !/tua Pass è attiva/.test(read.lead),
-    read.lead);
-  step('while what the stay includes is untouched by any of it',
-    read.text.includes('OPERA CAFFÈ'));
+  step('and the sheet says nothing about a card that does not exist',
+    read.state==='active' && read.cardActions===0 && read.cardState==='' && read.lead==='' && !/Privilege Card/i.test(read.text),
+    `${read.cardActions} card action(s), state "${read.cardState}"`);
 
-  const card = await (await fetch(`${B}/api/card/${
-    (await (await fetch(`${B}/api/guide/${longLink.split('/g/')[1]}`)).json()).pass.card.access_token
-  }`)).json();
-  step('and the server issues no code for a card that has not started',
-    card.qr === null && card.state === 'not-started', `${card.state}, qr ${card.qr}`);
-
-  await probe.screenshot({ path: 'tools/.qa-screens/pass-privilege-dormant.png', fullPage: true });
   await probe.close();
   await post(`/api/staff/reservations/${longStay.reservation.id}/cancel`, { reason: 'QA' });
 }
 
 /* ── A Pass that is over, or was called off ────────────────────────────────
    Nothing on this screen may read as usable, and a cancelled booking is not a
-   sales opportunity — so the buy button goes away with it. Checked on an upgraded
-   Pass, which is the harder case: the entitlement is real and still buys nothing. */
+   sales opportunity. At LunArt this was checked on an upgraded Pass, the harder
+   case; at Bella Vigna it is the Pass the guest can actually hold, and what is
+   checked is that the card and its facts say the booking is cancelled. */
 await post(`/api/staff/reservations/${today.reservation.id}/cancel`,{reason:'QA'});
 {
   const { probe, read } = await passSheetAt(390);
-  step('a cancelled booking makes every benefit unmistakably not usable',
-    read.unavailable===3 && read.available===0 && read.locked===0,
-    `${read.unavailable} unavailable, ${read.available} available`);
-  step('and is not treated as a sales opportunity', read.buy===0, `${read.buy} button(s)`);
-  step('with one honest line instead of a promise',
-    /I vantaggi valgono mentre la tua Pass è attiva/.test(read.lead), read.lead.slice(0,64));
+  step('a cancelled booking says so on the card and in its facts',
+    read.state==='cancelled' && read.facts.some((f) => /Prenotazione annullata/.test(f)),
+    `${read.state} · ${read.facts.at(-1)}`);
+  step('and nothing on it reads as usable',
+    read.available===0 && read.locked===0 && read.benefits===0,
+    `${read.available} available, ${read.locked} locked, ${read.benefits} benefits`);
+  step('and it is not treated as a sales opportunity', read.buy===0, `${read.buy} button(s)`);
   await probe.screenshot({path:'tools/.qa-screens/pass-partners-cancelled.png', fullPage:true});
   await probe.close();
 }
@@ -521,9 +573,12 @@ console.log('');
 /**
  * Measure every line on the card against the pixels actually behind it.
  *
- * A function rather than a block because it has to run twice: the Privilege plate is
- * gold, and the tier chip only exists there — which is exactly where a gold-on-gold
- * chip went unmeasured and came out invisible.
+ * A function rather than a block because it has to run more than once: at LunArt
+ * the Privilege plate is gold, and the tier chip only exists there — which is
+ * exactly where a gold-on-gold chip went unmeasured and came out invisible. At Bella
+ * Vigna neither the Privilege face nor the venue card can be reached until a venue
+ * is confirmed, so it runs on the Pass a guest can hold: before arrival at 390px,
+ * and in-house on the narrowest phone.
  */
 async function measureCard(target, tier, selector = '.sheet [data-pass]') {
   const colours = await target.evaluate((sel) => {
@@ -651,8 +706,8 @@ const started = await (await fetch(`${B}/api/checkout`, {
   method: 'POST',
   headers: { 'content-type': 'application/json' },
   body: JSON.stringify({
-    lines: [{ productId: 'light-breakfast', quantity: 1, date: inDays(31), slotId: 'b-0900', room: '303' }],
-    customer: { name: 'QA', email: 'qa@example.com', room: '303' },
+    lines: [{ productId: 'light-breakfast', quantity: 1, date: inDays(31), slotId: 'b-0900', room: ROOM }],
+    customer: { name: 'QA', email: 'qa@example.com', room: ROOM },
     lang: 'it',
     guideToken,
   }),
@@ -680,10 +735,10 @@ await page.screenshot({path:'tools/.qa-screens/pass-purchases-split.png'});
 const fresh = await b.newContext({...devices['iPhone 13'],locale:'it-IT'});
 const page2 = await fresh.newPage();
 await page2.goto(link,{waitUntil:'networkidle'}); await page2.waitForTimeout(2500);
-const cold = await page2.evaluate(()=>({
+const cold = await page2.evaluate((k)=>({
   purchases: document.querySelectorAll('.purchase').length,
-  stored: JSON.parse(localStorage.getItem('lunart.orders.v1')||'[]').length,
-}));
+  stored: JSON.parse(localStorage.getItem(k)||'[]').length,
+}), KEYS.orders);
 step('a brand-new browser still finds the purchase', cold.purchases>0, `${cold.purchases} shown, ${cold.stored} remembered locally`);
 await page2.screenshot({path:'tools/.qa-screens/flow-purchases.png'});
 step('no page errors', errs.length===0, errs.slice(0,2).join(' | '));
@@ -720,7 +775,7 @@ const moments = [
 ];
 const spent = [];
 for (const m of moments) {
-  const r = await post('/api/staff/reservations',{first_name:'Rank',last_name:`R${Math.random().toString(36).slice(2,6)}`,guest_email:'r@example.invalid',check_in:m.from,check_out:m.to,room:'303',adults:2,booking_reference:`RANK-${Date.now()}-${m.label.length}`});
+  const r = await post('/api/staff/reservations',{first_name:'Rank',last_name:`R${Math.random().toString(36).slice(2,6)}`,guest_email:'r@example.invalid',check_in:m.from,check_out:m.to,room:ROOM,adults:2,booking_reference:`RANK-${Date.now()}-${m.label.length}`});
   spent.push(r.reservation.id);
   const { link: l } = await post(`/api/staff/reservations/${r.reservation.id}/link`);
   const c = await b.newContext({...devices['iPhone 13'],locale:'it-IT'});
@@ -740,7 +795,7 @@ for (const m of moments) {
 }
 
 /* A one-night stay must not lose access to anything. */
-const oneNight = await post('/api/staff/reservations',{first_name:'Breve',last_name:`B${Math.random().toString(36).slice(2,6)}`,guest_email:'b@example.invalid',check_in:inDays(0),check_out:inDays(1),room:'303',adults:2,booking_reference:`ONE-${Date.now()}`});
+const oneNight = await post('/api/staff/reservations',{first_name:'Breve',last_name:`B${Math.random().toString(36).slice(2,6)}`,guest_email:'b@example.invalid',check_in:inDays(0),check_out:inDays(1),room:ROOM,adults:2,booking_reference:`ONE-${Date.now()}`});
 spent.push(oneNight.reservation.id);
 const { link: shortLink } = await post(`/api/staff/reservations/${oneNight.reservation.id}/link`);
 const c1 = await b.newContext({...devices['iPhone 13'],locale:'it-IT'});
@@ -753,293 +808,67 @@ step('and still gets three offers and a Pass',
   (await p1.locator('.offer').count())===3 && await p1.locator('[data-pass]').isVisible());
 await c1.close();
 
-/* ── Privilege is the same Pass, unlocked ──────────────────────────────────
-   The upgrade is bought through the checkout API rather than by driving the
-   product form — that form is qa-commerce's job, and what matters here is the
-   one thing only this file can see: the card the guest already had becomes
-   Privilege, and does not become a second card. */
+/* ── Privilege, withheld ───────────────────────────────────────────────────
+   At LunArt this bought the upgrade on this link and walked what changed: the same
+   card turning gold, the rows under it dimming while the card had not started, the
+   card's own section in the Pass, the venue card with its sealed preview QR, and
+   the legibility of the gold plate and of the venue card. None of it can exist at
+   Bella Vigna yet, and the unit tests carry those mechanics against a property
+   fixture (test/pass.test.mjs, test/privilege-card.test.mjs, test/card.test.mjs,
+   test/card-qr-slot.test.mjs). What only this file can see is that the withholding
+   is whole: the catalogue, the checkout and every screen agree that there is
+   nothing to buy and nothing to claim — and the day a venue is confirmed, the first
+   check below fails and says to walk the upgrade here again. */
 console.log('');
-const cardProduct = (await (await fetch(`${B}/api/catalog`)).json()).products.find((p) => p.id === 'privilege-card');
+const catalog = await (await fetch(`${B}/api/catalog`)).json();
+const cardProduct = catalog.products.find((p) => p.id === 'privilege-card');
 // `purchasable` is the catalogue's own answer, and it already carries the rule
 // that matters: no card partner, no Privilege on sale.
-const sellableCard = Boolean(cardProduct?.purchasable);
+step('Privilege is not on sale, because no venue has confirmed an agreement for Bella Vigna',
+  Boolean(cardProduct) && cardProduct.purchasable === false,
+  `catalogue says purchasable=${cardProduct?.purchasable}`);
+step('the catalogue publishes no claimable benefit, with the stay or with the card',
+  (catalog.stayBenefits ?? []).length === 0 && (catalog.cardBenefits ?? []).length === 0,
+  `${(catalog.stayBenefits ?? []).length} stay, ${(catalog.cardBenefits ?? []).length} card`);
+step('and every venue in it as being set up, with no benefit attached',
+  catalog.partners.length === 32
+    && catalog.partners.every((p) => p.partnership_status === 'activating' && (p.benefits ?? []).length === 0),
+  `${catalog.partners.filter((p) => p.partnership_status === 'activating').length}/${catalog.partners.length} activating`);
 
-if (sellableCard) {
-  const ctxJson = await (await fetch(`${B}/api/guide/${link.split('/g/')[1]}`)).json();
-  const option = ctxJson.cardOptions?.[0];
-  const upgrade = await post('/api/checkout', {
-    guideToken: link.split('/g/')[1],
-    lang: 'it',
-    customer: { name: 'Flow Ospite', email: 'flow@example.invalid' },
-    lines: [{
-      productId: 'privilege-card',
-      variantId: option?.variantId,
-      quantity: 1,
-      date: option?.startDates?.[0],
-      fields: { holderName: 'Flow Ospite' },
-    }],
-  });
-  step('the upgrade can be bought from the personal link', Boolean(upgrade.accessToken), upgrade.error ?? '');
+{
+  const upgrade = await buyPrivilege(link);
+  step('the upgrade cannot be bought from the personal link either', refusedForNoPartner(upgrade),
+    `${upgrade.error ?? 'accepted'} ${(upgrade.errors ?? []).map((e) => e.reason ?? e.code).join(', ')}`);
 
-  if (upgrade.accessToken) {
-    // The session id lives in the URL the guest would have been sent to.
-    const session = new URL(upgrade.checkoutUrl, B).searchParams.get('session');
-    const paid = await post('/mock-checkout/pay', { session });
-    step('and paid for', paid.ok === true, paid.error ?? '');
-    // Opening the order is what settles it, exactly as a returning guest would.
-    await fetch(`${B}/api/orders/${upgrade.accessToken}`);
-
-    const upgradeCtx = await b.newContext({ ...devices['iPhone 13'], locale: 'it-IT' });
-    const up = await upgradeCtx.newPage();
-    /** Every call for a card, so "it does not poll" can be more than a claim. */
-    const cardCalls = [];
-    up.on('request', (r) => { if (r.url().includes('/api/card/')) cardCalls.push(Date.now()); });
-    await up.goto(link, { waitUntil: 'networkidle' });
-    await up.waitForTimeout(2500);
-    const after = await up.evaluate(() => ({
-      tier: document.querySelector('[data-pass]')?.className ?? '',
-      heading: [...document.querySelectorAll('#main h2')].map((e) => e.textContent.trim()).join(' | '),
-      passes: document.querySelectorAll('[data-pass]').length,
-      section: document.querySelector('[data-pass-block]')?.innerText ?? '',
-      /** The two rows under the card, and how strongly each is actually painted. */
-      rows: [...document.querySelectorAll('[data-pass-block] .pass__benefit')].map((li) => ({
-        what: li.querySelector('.pass__benefit-what')?.textContent.trim() ?? '',
-        who: li.querySelector('.pass__benefit-partner')?.textContent.trim() ?? '',
-        dormant: li.classList.contains('pass__benefit--dormant'),
-        paid: li.classList.contains('pass__benefit--privilege'),
-        ink: getComputedStyle(li.querySelector('.pass__benefit-what')).color,
-        rule: getComputedStyle(li).borderLeftColor,
-        indent: getComputedStyle(li).paddingLeft,
-      })),
-    }));
-    step('the upgrade turns the same Pass into Privilege', /privilege/.test(after.tier), after.tier.trim());
-    /* The line under the Pass on the home. It used to say the benefits were
-       unlocked to anybody holding a card; this stay is a month away. */
-    /* And the rows above that sentence, which used to contradict it: the benefit
-       she paid for in full gold, two lines over "saranno disponibili da giovedì". */
-    {
-      const paid = after.rows.find((r) => r.paid);
-      const stay = after.rows.find((r) => !r.paid);
-      // `--ink-soft` is declared as an rgba, so this is what the browser reports —
-      // 6.16:1 once composited, which is the same ink the dormant venues use.
-      step('the paid row on the home is dimmed while the card is not running',
-        paid?.dormant === true && paid?.ink === 'rgba(26, 26, 26, 0.68)',
-        `${paid?.what} · ${paid?.ink}`);
-      step('and no longer set in the gold reserved for a benefit she can use',
-        paid?.ink !== stay?.ink && !/138, 106, 61/.test(paid?.ink ?? ''), paid?.ink);
-      step('keeping its gold rule, softened rather than removed',
-        paid?.rule === 'rgb(201, 168, 109)' && paid?.indent === '12px',
-        `${paid?.rule} at ${paid?.indent}`);
-      step('while the stay\'s own benefit is untouched by the card',
-        stay?.dormant === false && /opera/i.test(stay?.who ?? ''),
-        `${stay?.who} · ${stay?.ink}`);
-    }
-    step('and the home says she owns it, not that she can use it',
-      /Hai già LunArt Privilege/.test(after.section)
-        && !/vantaggi Privilege sbloccati/.test(after.section),
-      (after.section.match(/Hai già[^\n]*/) ?? ['(not found)'])[0]);
-    step('and there is still exactly one card, not two', after.passes === 1, `${after.passes}`);
-    step('the heading says Privilege', /privilege/i.test(after.heading), after.heading);
-    step('Opera stays under what the stay includes, even on an upgraded Pass',
-      /opera caff/i.test(after.section), after.section.replace(/\s+/g,' ').slice(0,90));
-
-    /* The upgrade has to be visibly an upgrade — same card, gold. Scrolled to, so
-       the screenshot is of the card and not of the top of the page. */
-    await up.locator('[data-pass]').scrollIntoViewIfNeeded();
-    await up.waitForTimeout(400);
-    const tier = await up.evaluate(() => {
-      const el = document.querySelector('[data-pass]');
-      return {
-        plate: getComputedStyle(el, '::before').backgroundImage.match(/[^/]+\.webp/)?.[0] ?? '',
-        chip: document.querySelector('.pass__tier')?.textContent.trim() ?? '',
-        border: getComputedStyle(el).borderTopColor,
-        ring: getComputedStyle(document.querySelector('.pass__face'), '::before').borderTopWidth,
-      };
-    });
-    /**
-     * One artwork, two tiers.
-     *
-     * Privilege used to have a plate of its own, which made it a different card
-     * rather than the same card upgraded. It now shares whatever the standard Pass
-     * wears and is marked by the edge and the chip alone — so the check compares the
-     * two rather than naming a file, and survives the artwork being changed.
-     */
-    step('Privilege shares the standard plate: one artwork, one family',
-      tier.plate === STANDARD_PLATE, `${tier.plate} vs ${STANDARD_PLATE}`);
-    step('and is marked by a gold edge rather than a different picture',
-      /rgb\(20[0-9], 1[0-9]{2}, 1[0-9]{2}\)/.test(tier.border) || tier.ring === '1px',
-      `border ${tier.border}, inner ring ${tier.ring}`);
-    step('with the tier said on the card itself', tier.chip.length > 0, tier.chip);
-    await up.screenshot({ path: 'tools/.qa-screens/pass-privilege.png' });
-
-    await up.locator('[data-pass]').click();
-    await up.waitForTimeout(900);
-    const privSheet = await up.evaluate(() => {
-      const labels = [...document.querySelectorAll('.sheet .pass__label')].map((e) => e.textContent.trim());
-      const first = document.querySelector('.sheet .pass__label[data-section="privilege-benefits"]');
-      // Everything under the Privilege benefits heading, up to the next one.
-      const privilegeBlock = [];
-      for (let node = first?.nextElementSibling; node && !node.classList.contains('pass__label'); node = node.nextElementSibling) {
-        privilegeBlock.push(node);
-      }
-      const within = (sel) => privilegeBlock.flatMap((n) => [...n.querySelectorAll(sel)]);
-      return {
-        labels,
-        privilegeVenues: within('.partner').length,
-        privilegeText: privilegeBlock.map((n) => n.innerText).join(' '),
-        locked: document.querySelectorAll('.sheet .partner[data-access="locked"]').length,
-        available: document.querySelectorAll('.sheet .partner[data-access="available"]').length,
-        allRows: document.querySelectorAll('.sheet .benefit').length,
-        buy: document.querySelectorAll('.sheet [data-product="privilege-card"]').length,
-        howTo: document.querySelector('.sheet [data-privilege-lead]')?.textContent.trim() ?? '',
-        hasQrAction: document.querySelectorAll('.sheet [data-card]').length,
-        cardLabel: labels.find((l) => /privilege card/i.test(l)) ?? '',
-        cardLine: document.querySelector('.sheet [data-card-state]')?.textContent.trim() ?? '',
-        cardState: document.querySelector('.sheet [data-card-state]')?.dataset.cardState ?? '',
-        cardAction: document.querySelector('.sheet [data-card]')?.innerText.trim() ?? '',
-      };
-    });
-    step('the Privilege sheet keeps the card, what it unlocks and what the stay gives apart',
-      privSheet.labels.length === 4 && /Privilege Card/i.test(privSheet.labels[0]),
-      privSheet.labels.join(' | '));
-    step('a guest who paid for it is shown the card first of all',
-      /Privilege Card/i.test(privSheet.labels[0] ?? ''), privSheet.labels[0]);
-    /**
-     * This stay is a month away, so nothing is claimable tonight — and that is the
-     * point of the check. A Privilege Pass is not a licence that begins when the
-     * money moves; it begins when the stay does, and the one date engine says so.
-     */
-    step('a Privilege Pass bought ahead of the stay claims nothing yet',
-      privSheet.available === 0 && privSheet.locked === 0 && privSheet.allRows === 4,
-      `${privSheet.available} available, ${privSheet.locked} locked, ${privSheet.allRows} benefits`);
-    step('and says so in one line rather than inviting the guest to a door',
-      /I vantaggi valgono mentre la tua Pass è attiva/.test(privSheet.howTo), privSheet.howTo.slice(0, 60));
-    step('with nothing left to buy', privSheet.buy === 0, `${privSheet.buy} button(s)`);
-    step('Opera Caffè is never drawn inside the Privilege section',
-      privSheet.privilegeVenues === 2 && !/opera/i.test(privSheet.privilegeText),
-      `${privSheet.privilegeVenues} venues under Privilege`);
-    /* ── The bug this file now guards ──────────────────────────────────────
-       A guest who had bought Privilege weeks before her stay opened her Pass and
-       found no way at all to look at the card she had paid for: the only
-       affordance was a button at the foot of the sheet, under three partner
-       blocks, promising a code that would not exist until November. */
-    step('the card she paid for has a section of its own, not a button at the foot',
-      /Privilege Card/i.test(privSheet.cardLabel) && privSheet.hasQrAction === 1,
-      `${privSheet.cardLabel} · ${privSheet.hasQrAction} action(s)`);
-    step('saying plainly that it is not active yet, and from when',
-      privSheet.cardState === 'not-started'
-        && /Non ancora attiva/.test(privSheet.cardLine) && /\bda\b/.test(privSheet.cardLine),
-      privSheet.cardLine);
-    step('and the button offers to open it, not to show a code that does not exist',
-      /Apri la card/i.test(privSheet.cardAction) && !/codice/i.test(privSheet.cardAction),
-      privSheet.cardAction);
-    await up.screenshot({ path: 'tools/.qa-screens/pass-privilege-sheet.png' });
-
-    // The gold plate is the harder of the two to read over, and it carries the one
-    // element that exists only here.
-    await measureCard(up, 'Privilege');
-
-    /* ── The card a venue is shown ─────────────────────────────────────────
-       Same tessera, so it has to look like one. It used to be a dark card with a
-       CSS-drawn monogram: a second design for what the guest experiences as one
-       object. */
-    await up.locator('.sheet [data-card]').click();
-    await up.waitForTimeout(1800);
-    const venue = await up.evaluate(() => {
-      const el = document.querySelector('.privilege-card');
-      if (!el) return null;
-      const style = getComputedStyle(el);
-      return {
-        plate: getComputedStyle(el, '::before').backgroundImage.match(/[^/]+\.webp/)?.[0] ?? '',
-        ink: style.color,
-        border: style.borderTopColor,
-        ratio: +(el.getBoundingClientRect().width / el.getBoundingClientRect().height).toFixed(3),
-        // A card that has not started shows when it will instead of a code. Both are
-        // correct; what would be wrong is neither.
-        // The slot is always there. What matters is which of the two fills it.
-        slot: document.querySelectorAll('.sheet .card-qr').length,
-        slotState: document.querySelector('.sheet .card-qr')?.dataset.state ?? '',
-        liveQr: document.querySelectorAll('.sheet [data-qr]').length,
-        previewQr: document.querySelectorAll('.sheet [data-qr-preview]').length,
-        modules: document.querySelectorAll('.sheet .card-qr__frame svg path').length,
-        seal: document.querySelector('.sheet .card-qr__seal')?.textContent.trim() ?? '',
-        slotText: document.querySelector('.sheet .card-qr')?.innerText.replace(/\s+/g, ' ').trim() ?? '',
-        pill: document.querySelector('.sheet .status-pill')?.textContent.trim() ?? '',
-        // The venues under the code, and what is said about them.
-        benefitsWhen: document.querySelector('.sheet [data-benefits-when]')?.textContent.trim() ?? '',
-        dormantVenues: document.querySelectorAll('.sheet .partner[data-access="unavailable"]').length,
-        lockedVenues: document.querySelectorAll('.sheet .partner__lock').length,
-        buy: document.querySelectorAll('.sheet [data-product]').length,
-        sheetText: document.querySelector('.sheet')?.innerText ?? '',
-        face: el.innerText.replace(/\s+/g, ' ').trim(),
-        mark: document.querySelectorAll('.privilege-card .pass__mark').length,
-      };
-    });
-    step('the venue card wears the same painting', venue?.plate === STANDARD_PLATE, `${venue?.plate} vs ${STANDARD_PLATE}`);
-    step('in the same ink, with the same gold edge',
-      venue?.ink === 'rgb(21, 18, 11)' && venue?.border === 'rgb(201, 168, 109)', `${venue?.ink} / ${venue?.border}`);
-    step('and the same proportions as the Pass', Math.abs((venue?.ratio ?? 0) - 85 / 55) < 0.02, `${venue?.ratio}`);
-    step('the venue card carries the LunArt mark, since the artwork does not',
-      venue?.mark === 1, `${venue?.mark} mark(s)`);
-    // The venue card has its own type over the same painting, and its own wash — which
-    // is exactly the copy that was missed when the washes were raised.
-    await measureCard(up, 'Venue card', '.privilege-card');
-    /* ── A card that is owned and not yet usable ───────────────────────────
-       An information state, not an authorisation one. The guest gets the real card
-       — her name, the dates, the number — the slot her code will occupy, and a
-       sentence saying when it starts. What she does not get, and what the server
-       would refuse to issue, is a code. */
-    step('the code has a place on the screen before the card starts',
-      venue?.slot === 1 && venue?.slotState === 'not-started' && venue?.modules === 1,
-      `${venue?.slot} slot(s), state ${venue?.slotState}, ${venue?.modules} symbol(s)`);
-    step('and it is the preview, never the live code',
-      venue?.previewQr === 1 && venue?.liveQr === 0,
-      `${venue?.previewQr} preview, ${venue?.liveQr} live`);
-    step('sealed with the state, across the symbol where it cannot be missed',
-      /NON ANCORA ATTIVA/i.test(venue?.seal ?? ''), venue?.seal);
-    step('saying what it is and when it starts, without a technical word in it',
-      /codice della tua Privilege Card/i.test(venue?.slotText ?? '')
-        && /Diventa attiva/.test(venue?.slotText ?? '')
-        && !/token|rotante|crittograf/i.test(venue?.slotText ?? ''),
-      (venue?.slotText ?? '').slice(0, 110));
-    step('and the state is said once, not twice', venue?.pill === '', venue?.pill || 'no pill');
-    /* ── The venues under a dormant card ───────────────────────────────────
-       The QR says NON ANCORA ATTIVA; the benefits under it used to say nothing at
-       all, and "10% di sconto" set large in the serif reads as an offer. */
-    step('the benefits under a dormant card say when they start',
-      /si attiveranno insieme alla tua Privilege Card/.test(venue?.benefitsWhen ?? ''),
-      venue?.benefitsWhen || '(no line)');
-    step('and are visibly not usable, without being locked or sold again',
-      venue?.dormantVenues === 2 && venue?.lockedVenues === 0 && venue?.buy === 0,
-      `${venue?.dormantVenues} dimmed, ${venue?.lockedVenues} locked, ${venue?.buy} buy`);
-    step('and the internal door note is nowhere on the card screen',
-      !/ingressi adiacenti/i.test(venue?.sheetText ?? '') && /14R–16R/.test(venue?.sheetText ?? ''),
-      'address kept, operational note gone');
-    step('and the real card underneath it: holder, dates and number',
-      /Flow/.test(venue?.face ?? '') && /N\./.test(venue?.face ?? '') && /nov/.test(venue?.face ?? ''),
-      venue?.face);
-
-    /* A preview costs nothing to leave open. The rotation exists to keep a live
-       code current, and there is no live code here to keep — so the screen asks
-       once, draws, and goes quiet. */
-    const asked = cardCalls.length;
-    await up.waitForTimeout(12_000);
-    step('and a card that cannot be used asks the server for nothing more',
-      cardCalls.length === asked, `${cardCalls.length - asked} further call(s) in 12s`);
-    await up.screenshot({ path: 'tools/.qa-screens/pass-venue-card.png' });
-    await upgradeCtx.close();
-  }
-} else {
-  /**
-   * The rail: no card partner, no Privilege on sale.
-   *
-   * This used to be the expected branch — production shipped with no card partner,
-   * so the upgrade was withheld and a demo venue was the only way to walk the flow.
-   * Le Firme and Blue Velvet reserve real benefits for it now, so reaching here
-   * means the register lost them, which is a failure and not a configuration.
-   */
-  step('Privilege is on sale, because real partners stand behind it', false,
-    `catalogue says purchasable=${cardProduct?.purchasable}`);
+  const upgradeCtx = await b.newContext({ ...devices['iPhone 13'], locale: 'it-IT' });
+  const up = await upgradeCtx.newPage();
+  /** Every call for a card: there is none to ask about, so there should be none. */
+  const cardCalls = [];
+  up.on('request', (r) => { if (r.url().includes('/api/card/')) cardCalls.push(r.url()); });
+  await up.goto(link, { waitUntil: 'networkidle' });
+  await up.waitForTimeout(2500);
+  const after = await up.evaluate(() => ({
+    tier: document.querySelector('[data-pass]')?.className ?? '',
+    heading: [...document.querySelectorAll('#main h2')].map((e) => e.textContent.trim()).join(' | '),
+    passes: document.querySelectorAll('[data-pass]').length,
+    chip: document.querySelector('.pass__tier')?.textContent.trim() ?? '',
+    section: document.querySelector('[data-pass-block]')?.innerText ?? '',
+    rows: document.querySelectorAll('[data-pass-block] .pass__benefit').length,
+    offers: [...document.querySelectorAll('.offer__title')].map((e) => e.textContent.trim()),
+  }));
+  step('the Pass stays the Pass: the standard tier, one card, no Privilege chip',
+    !/privilege/.test(after.tier) && after.passes === 1 && after.chip === '',
+    `${after.tier.trim()} · ${after.passes} card(s) · chip "${after.chip}"`);
+  step('the heading says Pass, not Privilege', /Bella Vigna Pass/.test(after.heading) && !/privilege/i.test(after.heading),
+    after.heading.split(' | ').find((h) => /Pass/.test(h)) ?? after.heading);
+  step('the home lists no benefit row under the card and says nothing of owning Privilege',
+    after.rows === 0 && !/privilege|Hai già/i.test(after.section),
+    (after.section.split('\n').filter(Boolean).at(-1) ?? '').slice(0, 80));
+  step('and Privilege is not one of the offers the home leads with',
+    after.offers.length === 3 && !after.offers.some((o) => /privilege/i.test(o)), after.offers.join(' · '));
+  step('nothing asks the server for a card', cardCalls.length === 0, cardCalls.slice(0, 2).join(', ') || 'no calls');
+  await up.screenshot({ path: 'tools/.qa-screens/pass-privilege-withheld.png' });
+  await upgradeCtx.close();
 }
 
 // Tidy up after ourselves.
