@@ -44,7 +44,7 @@ revisione: **`/?review=1`** sull'anteprima (invisibile agli ospiti).
 | C2 | `QUOVAI_ICAL_FEEDS=Standard:…,Deluxe:…,Terrazza:…`, `ICAL_POLL_MINUTES` | URL dei feed iCal di Bella Vigna; prima "Esamina i feed" dallo Staff |
 | C3 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Decidere: account Stripe proprio o condiviso con LunArt. Se condiviso, gli eventi sono separati da `metadata.property`; webhook dedicato all'URL di produzione BV |
 | C4 | `CARD_SIGNING_KEY`, `STAFF_TOKEN` | Nuovi, generati per Bella Vigna. **Mai** quelli di LunArt |
-| C5 | `VAPID_PUBLIC_KEY/PRIVATE_KEY/SUBJECT` | Coppia propria; **elenco dei dispositivi Staff autorizzati** (proposto: Diego) |
+| C5 | `VAPID_PUBLIC_KEY/PRIVATE_KEY/SUBJECT` | Con la Staff App unica le notifiche partono dalla **console** (una coppia VAPID per la console, non per struttura); **elenco dei dispositivi Staff autorizzati** (Diego) |
 | C6 | `GUIDE_DATA_DIR` su disco persistente | Disco proprio del servizio BV (lo store si timbra `bella-vigna`) |
 | C7 | `PUBLIC_URL` | URL stabile di produzione (dominio da decidere) |
 
@@ -64,6 +64,19 @@ revisione: **`/?review=1`** sull'anteprima (invisibile agli ospiti).
 | E1 | Servizio di **produzione** separato dallo staging (Render o altro), con disco persistente | `render.yaml` descrive solo lo staging (`GUIDE_PREVIEW=1`). La produzione è un servizio nuovo, **senza** `GUIDE_PREVIEW` |
 | E2 | Merge del branch in `main` | Se `main` del repository Bella Vigna è pubblicato (es. GitHub Pages), il merge sostituisce la pagina di giugno con la guida (la pagina resta in `legacy/`, non servita) |
 | E3 | Approvazione del Core delta per LunArt (`docs/CORE-DELTA.md`) | PR separata sul repository LunArt, testata lì |
+
+## E-bis. Staff App unica (decisione dell'operatore, 9 ottobre 2026)
+
+Bella Vigna **non** pubblica una propria Staff App: si opera da un'unica console per
+LunArt e Bella Vigna (`docs/STAFF-UNIFICATA.md`). La `/staff` di questo server resta
+solo in staging, come banco di prova delle API.
+
+| # | Da decidere | Note |
+|---|---|---|
+| S1 | Approccio: console sopra le API delle due strutture | Raccomandato; LunArt in produzione non va toccato per partire |
+| S2 | Operatori, ruoli e strutture per ciascuno | Proposta: rimborsi, catture e catch-up email solo direzione/admin |
+| S3 | Metodo di accesso (password o passkey) e indirizzo della console | |
+| S4 | Accesso in scrittura al repository LunArt per la PR del Core | Branch dedicato, nessun merge senza approvazione |
 
 ## F. Sequenza di attivazione (dal Master Bible §26, adattata)
 

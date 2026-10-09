@@ -311,3 +311,37 @@ test('when staff message a guest from the shared line, the first words name Bell
     assert.match(decodeURIComponent(body.whatsapp.split('text=')[1]), /^Bella Vigna Firenze/);
   } finally { server.close(); }
 });
+
+test('every Staff API answer and every staff record names its house', async () => {
+  // One Staff app will read several properties' APIs (docs/STAFF-UNIFICATA.md).
+  // The house is stated by the server, on the response and on each record, so a
+  // console never has to infer it from the address it happened to call.
+  const app = await createApp({
+    stripe: createMockStripe(), useDevPrices: false, seed: false, publicUrl: 'http://127.0.0.1',
+    staffToken: 'tenant-staff', mode: 'development',
+  });
+  await ingestEvent({
+    store: app.store,
+    event: {
+      kind: 'new', source: 'quovai', booking_reference: 'BV-STAFF-1', first_name: 'Ada', last_name: 'Prova',
+      guest_email: 'ada@example.invalid', check_in: today, check_out: addDays(today, 2), rooms: ['Deluxe'], room: 'Deluxe',
+      message_id: '<bv-staff-1@test>',
+    },
+  });
+  await app.store.orders.create({ lines: [], customer: { name: 'Ada', email: 'ada@example.invalid', room: 'Deluxe' }, status: 'paid' });
+  const server = app.listen(0);
+  await new Promise((resolve) => server.once('listening', resolve));
+  const get = async (path) => (await fetch(`http://127.0.0.1:${server.address().port}/api/staff${path}`, {
+    headers: { authorization: 'Bearer tenant-staff' },
+  })).json();
+  try {
+    for (const path of ['/dashboard', '/orders', '/reservations', '/sync']) {
+      const body = await get(path);
+      assert.deepEqual(body.property, { id: 'bella-vigna', name: 'Bella Vigna', longName: 'Bella Vigna Firenze' }, path);
+    }
+    const { reservations } = await get('/reservations');
+    assert.ok(reservations.length > 0 && reservations.every((r) => r.property === 'bella-vigna'));
+    const { orders } = await get('/orders');
+    assert.ok(orders.length > 0 && orders.every((o) => o.property === 'bella-vigna'));
+  } finally { server.close(); }
+});

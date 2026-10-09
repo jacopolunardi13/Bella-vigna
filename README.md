@@ -34,6 +34,7 @@ GUIDE_PREVIEW=1 STAFF_TOKEN=prova npm start  # staging locale → http://localho
 - `docs/PREVIEW.md` — lo staging: come avviarlo, cosa contiene, cosa è spento
 - `docs/GO-LIVE.md` — **solo** le conferme necessarie per la produzione
 - `docs/WHATSAPP.md` — uso operativo della linea WhatsApp condivisa con LunArt
+- `docs/STAFF-UNIFICATA.md` — una sola Staff App per LunArt e Bella Vigna: audit e architettura
 - `docs/CORE-README.md` — documentazione tecnica completa del Core (da LunArt)
 
 ## Regole che il codice fa rispettare

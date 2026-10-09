@@ -25,6 +25,7 @@ import { opaqueToken, randomRef } from './store.js';
 import { propertyDate, isValidDate, addDays } from '../commerce/time.js';
 import { stayDates } from '../commerce/stay.js';
 import { roomsOf, roomsIn, roomFields, roomList } from '../commerce/rooms.js';
+import { PROPERTY_ID } from '../data/brand.js';
 
 export const RESERVATION_STATUS = {
   /** Live, and either coming or here. */
@@ -583,6 +584,8 @@ export function staffView(reservation) {
   if (!reservation) return null;
   return {
     id: reservation.id,
+    /** Which house this stay is at — every staff record says so (one Staff app, several properties). */
+    property: PROPERTY_ID,
     status: reservation.status,
     source: reservation.source,
     channel: reservation.channel,

@@ -30,6 +30,7 @@ import {
   rotateGuideToken, RESERVATION_STATUS, isLive, incompleteFields,
 } from './reservations.js';
 import { scheduleGuideEmail, cancelGuideEmail, guideUrl, DELIVERY_STATUS } from './delivery.js';
+import { PROPERTY_ID } from '../data/brand.js';
 
 /** The queues the Staff app shows, in the order they are worked. */
 export const STAFF_QUEUES = ['new', 'awaiting', 'preparing', 'completed', 'cancelled'];
@@ -69,6 +70,8 @@ export const isExpress = (order) => order.lines.some(
 export function staffOrderView(order, { now = new Date() } = {}) {
   return {
     id: order.id,
+    /** Which house this order belongs to — every staff record says so (one Staff app, several properties). */
+    property: PROPERTY_ID,
     reference: orderReference(order),
     queue: queueOf(order),
     status: order.status,

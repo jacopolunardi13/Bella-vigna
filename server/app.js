@@ -991,8 +991,15 @@ export async function createApp(overrides = {}) {
     await handler(req, res, params, url);
   };
 
+  /**
+   * Who answers. Every Staff API response carries it, so a console reading more
+   * than one property's API never has to infer the house from the URL it called.
+   */
+  const staffIdentity = { id: brand.id, name: brand.name, longName: brand.longName };
+
   async function getStaffDashboard(req, res) {
     sendJson(res, 200, {
+      property: staffIdentity,
       ...await dashboard({ store }),
       push: { configured: push.configured, publicKey: push.publicKey },
       sources: reservationSources(settings),
@@ -1006,6 +1013,7 @@ export async function createApp(overrides = {}) {
       ? orders.filter((order) => queueOf(order) === queue)
       : orders;
     sendJson(res, 200, {
+      property: staffIdentity,
       queue: queue ?? 'all',
       counts: Object.fromEntries(STAFF_QUEUES.map((q) => [q, orders.filter((o) => queueOf(o) === q).length])),
       orders: chosen.map((order) => staffOrderView(order)),
@@ -1110,6 +1118,7 @@ export async function createApp(overrides = {}) {
     const which = url.searchParams.get('status');
     const rows = which ? all.filter((r) => r.status === which) : all;
     sendJson(res, 200, {
+      property: staffIdentity,
       reservations: rows
         .sort((a, b) => String(a.check_in).localeCompare(String(b.check_in)))
         .map(staffView),
@@ -1174,6 +1183,7 @@ export async function createApp(overrides = {}) {
     const calendarState = providerCalendar.state?.() ?? {};
 
     sendJson(res, 200, {
+      property: staffIdentity,
       ...await syncOverview({ store }),
       mailbox: mailbox
         ? {

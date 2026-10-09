@@ -35,7 +35,7 @@ GUIDE_PREVIEW=1 STAFF_TOKEN=prova node server/index.js
 | `/g/<token>` | due prenotazioni **inventate** (camere Standard e Terrazza), con Pass |
 | `/?review=1` | ogni dato ancora da confermare, nel suo contesto (non visibile agli ospiti) |
 | `/recover` | link perso: cognome + numero di prenotazione |
-| `/staff` | Bella Vigna Staff (chiede il token una volta) |
+| `/staff` | Staff di questo server, solo per lo staging: in produzione si userà la Staff App unica LunArt + Bella Vigna (`docs/STAFF-UNIFICATA.md`) |
 | `/validate-card` | pagina venue generica |
 | `/api/health` | cosa è configurato e cosa è spento |
 
