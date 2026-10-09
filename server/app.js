@@ -17,12 +17,12 @@ import { brand } from '../data/brand.js';
 import { wifiFor } from './private-facts.js';
 import { createStripe, createMockStripe, verifyWebhookSignature } from './stripe.js';
 import {
-  readJson, readRawBody, sendJson, sendHtml, sendText, redirect, serveStatic, matchRoute, escapeHtml,
+  readJson, readRawBody, sendJson, sendHtml, sendText, redirect, serveStatic, matchRoute, escapeHtml, sameSecret,
 } from './http.js';
 import {
   priceAndBuild, stripeLineItems, fulfilOrder, orderView, orderReference, canTransition, appendEvent,
 } from './orders.js';
-import { roomsIn, roomList, roomIdFor } from '../commerce/rooms.js';
+import { roomsIn, roomList, roomIdFor, roomLabel, ROOM_IDS } from '../commerce/rooms.js';
 import { reconcileExternalRefund, refundFromCharge, REFUND_SOURCES } from './refunds.js';
 import { holderView, currentCode, validateCode, qrPayload, cardState, revoke } from './card.js';
 import {
@@ -887,7 +887,15 @@ export async function createApp(overrides = {}) {
    */
   const getGuidePage = (req, res) => sendPage(res, 'index.html', { base: true });
   const getIndexPage = (req, res) => sendPage(res, 'index.html');
-  const getStaffPage = (req, res) => sendPage(res, 'staff.html');
+  /**
+   * Once the shared token is retired, this server has no Staff app of its own:
+   * `/staff` is the console's front door.
+   */
+  const getStaffPage = (req, res) => {
+    if (!settings.staffTokenRetired) { sendPage(res, 'staff.html'); return; }
+    if (settings.console?.url) { redirect(res, settings.console.url); return; }
+    sendText(res, 410, 'Lo staff lavora dalla console unica.');
+  };
 
   /**
    * The preview's own front door.
@@ -976,11 +984,18 @@ export async function createApp(overrides = {}) {
 
   /* ── Staff ───────────────────────────────────────────────────────────── */
 
+  /**
+   * Two credentials open the Staff API: the console's own (CONSOLE_SERVICE_TOKEN),
+   * and the shared STAFF_TOKEN of the per-property Staff app until it is retired
+   * (STAFF_TOKEN_RETIRED). Both are compared in constant time.
+   */
   function staffAuthorised(req) {
-    if (settings.staffToken) {
-      const header = String(req.headers.authorization ?? '');
-      return header === `Bearer ${settings.staffToken}`;
-    }
+    const header = String(req.headers.authorization ?? '');
+    const presented = header.startsWith('Bearer ') ? header.slice(7) : '';
+    const service = settings.console?.serviceToken ?? '';
+    const shared = settings.staffTokenRetired ? '' : settings.staffToken;
+    if (sameSecret(presented, service) || sameSecret(presented, shared)) return true;
+    if (service || settings.staffToken) return false;
     // Without a token configured this is a preview, not an operation. Refusing in
     // production is the safe side of the trade: better unusable than open.
     return settings.mode !== 'production';
@@ -1000,6 +1015,9 @@ export async function createApp(overrides = {}) {
   async function getStaffDashboard(req, res) {
     sendJson(res, 200, {
       property: staffIdentity,
+      // The rooms this house has, so a console serving several houses offers the
+      // right ones in its forms without knowing any of them in advance.
+      rooms: ROOM_IDS.map((id) => ({ id, label: roomLabel(id, 'it') })),
       ...await dashboard({ store }),
       push: { configured: push.configured, publicKey: push.publicKey },
       sources: reservationSources(settings),
@@ -1659,6 +1677,18 @@ export async function createApp(overrides = {}) {
           lastSuccessAt: pushState.lastSuccessAt ?? null,
           note: push.configured ? null : 'The Staff app polls; notifications are recorded and marked simulated.',
           extra: { transport: push.id, sent: pushState.sent ?? 0, removed: pushState.removed ?? 0 },
+        }),
+        /** The Staff console: whether it can call here, and whether events reach it. Never the secrets. */
+        staffConsole: integrationState({
+          implemented: true,
+          configured: Boolean(settings.console?.serviceToken),
+          requires: ['CONSOLE_SERVICE_TOKEN', 'CONSOLE_RELAY_URL', 'CONSOLE_RELAY_SECRET'],
+          lastError: push.relay?.state().lastError ?? null,
+          extra: {
+            relay: Boolean(push.relay),
+            relayed: push.relay?.state().sent ?? 0,
+            sharedStaffToken: settings.staffTokenRetired ? 'retired' : settings.staffToken ? 'active' : 'unset',
+          },
         }),
         providerCalendar: integrationState({
           implemented: true,

@@ -106,6 +106,24 @@ export const config = {
   staffToken: env.STAFF_TOKEN ?? '',
 
   /**
+   * The Staff console (`docs/STAFF-UNIFICATA.md`): one app for every property.
+   *
+   * `serviceToken` is the credential the console — and only the console — uses on
+   * this Staff API; it works alongside STAFF_TOKEN, so the switch happens without
+   * stopping anybody. Once every person works from the console, STAFF_TOKEN_RETIRED
+   * turns the shared token off and `/staff` sends people to the console instead.
+   * `relayUrl`/`relaySecret` make every staff notification go to the console, which
+   * pushes it to the phones of the people who work here.
+   */
+  console: {
+    serviceToken: env.CONSOLE_SERVICE_TOKEN ?? '',
+    url: String(env.CONSOLE_URL ?? '').trim().replace(/\/+$/, ''),
+    relayUrl: String(env.CONSOLE_RELAY_URL ?? env.CONSOLE_URL ?? '').trim().replace(/\/+$/, ''),
+    relaySecret: env.CONSOLE_RELAY_SECRET ?? '',
+  },
+  staffTokenRetired: bool(env.STAFF_TOKEN_RETIRED, false),
+
+  /**
    * The in-room Wi-Fi password, if the guide is to show it at all.
    *
    * Never in the repository, never in `data/`, never in a log: guests normally join
@@ -176,7 +194,7 @@ export function configWarnings() {
   const warnings = [];
   if (config.preview) {
     warnings.push('GUIDE_PREVIEW is on: demonstration mode. Payments are the built-in stand-in, no email leaves, no mailbox is read, no calendar is written, and any credentials in the environment are ignored.');
-    if (!config.staffToken) {
+    if (!config.staffToken && !config.console.serviceToken) {
       warnings.push('A preview without STAFF_TOKEN leaves the Staff app open to anyone with the URL. Set one.');
     }
     return warnings;
@@ -195,7 +213,10 @@ export function configWarnings() {
   if (config.allowPlaceholderPrices && config.mode === 'production') {
     warnings.push('ALLOW_PLACEHOLDER_PRICES is on in production: unconfirmed prices can be charged.');
   }
-  if (!config.staffToken) {
+  if (config.staffTokenRetired && !config.console.serviceToken) {
+    warnings.push('STAFF_TOKEN_RETIRED is on but CONSOLE_SERVICE_TOKEN is not set: nobody can reach the Staff API.');
+  }
+  if (!config.staffToken && !config.console.serviceToken) {
     warnings.push('STAFF_TOKEN is not set: the Staff app and the provider endpoints are open to anyone who can reach them.');
   }
   if (!config.mailboxSource) {

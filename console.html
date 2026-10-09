@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="it" data-staff-mode="console">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{NAME}}</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#16140f">
+<link rel="manifest" href="/console.webmanifest">
+<link rel="icon" href="/assets/icon-console.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/assets/icon-180.png">
+<link rel="stylesheet" href="/assets/css/fonts.css">
+<link rel="stylesheet" href="/assets/css/staff.css">
+</head>
+<body>
+
+<p class="preview-flag" {{PREVIEW}}>Staging · nessun pagamento reale · nessuna email agli ospiti</p>
+
+<header class="bar">
+  <span class="bar__mark">Staff <span id="bar-scope">LunArt · Bella Vigna</span></span>
+  <div class="bar__tools">
+    <span class="dot" id="push-state" title="Notifiche"></span>
+    <button class="bar__button" type="button" id="account" aria-label="Il mio accesso" hidden>◐</button>
+    <button class="bar__button" type="button" id="refresh" aria-label="Aggiorna">↻</button>
+  </div>
+</header>
+
+<nav class="scope" id="scope" aria-label="Struttura" hidden></nav>
+<nav class="tabs" id="tabs" aria-label="Sezioni"></nav>
+
+<main id="main" tabindex="-1">
+  <p class="loading">Carico…</p>
+</main>
+
+<div class="gate" id="gate" hidden>
+  <div class="gate__panel" id="gate-panel">
+    <h1>Staff LunArt · Bella Vigna</h1>
+    <p>Accedi con la tua passkey: Face ID, impronta o il PIN del telefono.</p>
+    <button class="action action--primary" type="button" id="sign-in">Accedi con passkey</button>
+    <p class="gate__note" id="gate-note" hidden></p>
+  </div>
+</div>
+
+<script src="/assets/vendor/simplewebauthn-browser-13.3.0.umd.min.js"></script>
+<script type="module" src="/src/staff/app.js"></script>
+</body>
+</html>
