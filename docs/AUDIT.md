@@ -17,6 +17,8 @@ Nessuna modifica a LunArt, a `main` o alla produzione.
 
 Foto usate nella guida: le 10 fotografie Bella Vigna e il logo già incorporati (base64) nella pagina di giugno, estratti senza alterazioni in `assets/img/_src/`. Nessuna immagine LunArt.
 
+> **Aggiornamento 9 ottobre 2026.** Le due cartelle Drive (71 foto) sono state lette integralmente tramite i loro link pubblici e la guida usa ora 16 fotografie scelte da lì, attribuite camera per camera (`assets/img/_src/README.md`). Il logo è ora il file originale `Bella_Vigna_logo_oro_classico.jpg` dell'email di Valentina Longo dell'11 marzo 2026, estratto dal messaggio completo (il connettore Gmail non scarica gli allegati singolarmente, ma restituisce il messaggio MIME intero). Le righe sopra descrivono lo stato al momento dell'audit.
+
 ## 2. LunArt: stato reale e baseline stabile
 
 | Ref | Commit | Cosa contiene |

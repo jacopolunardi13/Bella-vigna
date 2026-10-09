@@ -16,7 +16,7 @@ revisione: **`/?review=1`** sull'anteprima (invisibile agli ospiti).
 | A3 | **Accesso**: piano, ascensore, scale, portone, tipo di serrature/chiavi | `data/entries/arrival.js` → `access`; `data/entries/stay.js` → `accessibility` |
 | A4 | **Procedura self check-in fuori orario**: come arrivano codici/istruzioni all'ospite (canale privato, mai nella guida) | `late-arrival`; se serve un canale nel sistema, nuova "private fact" come il Wi-Fi |
 | A5 | **Identificativi QuoVai/PMS delle 3 camere** e **capienza** di ciascuna | `data/rooms.js` → `roomRegistry` (alias) e `verify` delle camere; `children` in `stay.js` |
-| A6 | Bagno della camera con terrazza: **turchese** (Pack) o la foto stone attribuita dalla vecchia pagina? | `data/rooms.js` → foto `rooms/terrazza-bagno` |
+| A6 | ~~Bagno della camera con terrazza: turchese o pietra?~~ **Risolto** dalle foto Drive: è lo stesso bagno (pareti in pietra, doccia turchese). Resta da confermare se anche la **Standard ha il frigobar** (si vede nella foto `rooms/standard-dotazioni`; il testo lo attribuisce solo alla Terrazza) | `data/rooms.js` → `roomsCommon` e `verify` della Standard |
 | A7 | **Colazione**: orario all'Opera Caffè, cosa copre il ticket, in quali **rate plan** è inclusa | `data/entries/breakfast.js` → `breakfast` |
 | A8 | Deposito bagagli all'Opera Caffè per ospiti Bella Vigna: come vengono riconosciuti | `luggage-early`, `luggage-late` |
 | A9 | **Garage Tornabuoni / ZTL**: prenotazione (link), tariffa, orari, procedura targa, copertura ingressi/uscite | `data/entries/arrival.js` → `parking`, `ztl` |
@@ -24,7 +24,7 @@ revisione: **`/?review=1`** sull'anteprima (invisibile agli ospiti).
 | A11 | Pulizia quotidiana reale; policy fumo (anche in terrazza); animali; culla/letto aggiuntivo | `stay.js` → `cleaning`, `smoking`, `pets`, `children` |
 | A12 | Numero di Diego per gli ospiti Bella Vigna (+39 334 211 5505, dalla config LunArt) | `data/property.js` → `contacts.diego.verify` |
 | A13 | Condizioni di prenotazione dirette di Bella Vigna (se diverse da "fa fede la conferma") | `help.js` → `booking-terms` |
-| A14 | Logo definitivo approvato (oggi: logo oro dalla pagina di giugno) e foto approvate; le foto della cartella "nuove foto settembre 2026" non sono state accessibili | `assets/img/_src/`, poi `python3 -I tools/make-bella-vigna-assets.py` e `node tools/optimize-images.mjs` |
+| A14 | **Logo**: confermare che `Bella_Vigna_logo_oro_classico.jpg` (email di Valentina Longo, 11/03/2026, ora la sorgente) è la versione approvata; esiste un file vettoriale per la stampa? **Foto**: approvare la selezione per camera (16 foto da Drive, cartella principale e "nuove foto settembre 2026"; elenco e motivi in `assets/img/_src/README.md`) | `assets/img/_src/`, `tools/import-room-photos.py`, poi `python3 -I tools/make-bella-vigna-assets.py` e `node tools/optimize-images.mjs` |
 | A15 | Consigli su Firenze: confermare che valgono anche per Bella Vigna (sono quelli LunArt, senza distanze) | `data/entries/florence.js` → `eat.verify` |
 
 ## B. Canali e identità

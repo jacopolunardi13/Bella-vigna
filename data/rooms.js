@@ -8,9 +8,12 @@
  * notification parser, and every room carries a `blocker` until the mapping and
  * the capacity are checked against a real Bella Vigna notification.
  *
- * Photographs come from the property's own June 2026 page (`legacy/index.html`),
- * where each one was already captioned with its room; the originals are in
- * `assets/img/_src/`. No LunArt image is used anywhere.
+ * Photographs are the property's own, from its Google Drive (main folder and
+ * "nuove foto settembre 2026"), chosen and cut for the phone by
+ * `tools/import-room-photos.py`; the sources are in `assets/img/_src/rooms/`.
+ * Each room is told apart by its bathroom — caramel tiles in the Standard, the
+ * green double shower in the Deluxe, turquoise in the terrace room — and by its
+ * furniture, the same across every shot of it. No LunArt image is used anywhere.
  */
 
 /**
@@ -52,10 +55,14 @@ export const rooms = [
       en: 'The snuggest room in the house: travertine lamps and a bathroom in caramel tones.',
     },
     photos: [
-      { src: 'rooms/standard-camera', alt: { it: 'Camera Standard, letto matrimoniale e lampade a sfera', en: 'Standard room, double bed and globe lamps' } },
-      { src: 'rooms/standard-bagno', alt: { it: 'Bagno della camera Standard, piastrelle nei toni del caramello', en: 'Standard room bathroom, caramel-toned tiles' } },
+      { src: 'rooms/standard-camera', alt: { it: 'Camera Standard: letto matrimoniale, lampade in travertino e scrittoio alla finestra', en: 'Standard room: double bed, travertine lamps and a writing desk by the window' } },
+      { src: 'rooms/standard-letto', alt: { it: 'Il letto della camera Standard, con i cuscini color caramello', en: 'The Standard room’s bed, with caramel cushions' } },
+      { src: 'rooms/standard-dotazioni', alt: { it: 'Camera Standard: TV a parete, macchina del caffè e portavaligie', en: 'Standard room: wall TV, coffee machine and luggage rack' } },
+      { src: 'rooms/standard-bagno', alt: { it: 'Bagno della camera Standard: doccia con piastrelle color caramello', en: 'Standard room bathroom: shower with caramel tiles' } },
+      { src: 'rooms/standard-doccia', alt: { it: 'Le piastrelle color caramello della doccia, camera Standard', en: 'The caramel-tiled shower, Standard room' } },
     ],
-    verify: { level: 'blocker', note: capacityNote },
+    verify: { level: 'blocker',
+      note: `${capacityNote} Inoltre: la foto rooms/standard-dotazioni mostra un piccolo frigorifero sotto la macchina del caffè, mentre il testo comune attribuisce il frigobar alla sola camera con terrazza (Property Pack §3) — confermare se anche la Standard ce l’ha.` },
   },
   {
     id: 'Deluxe',
@@ -67,10 +74,11 @@ export const rooms = [
       en: 'Bright and spacious, made for couples: a double bathroom with two showers, green tiling and a freestanding basin.',
     },
     photos: [
-      { src: 'rooms/deluxe-camera', alt: { it: 'Camera Deluxe con scrivania e poltrona', en: 'Deluxe room with desk and armchair' } },
+      { src: 'rooms/deluxe-camera', alt: { it: 'Camera Deluxe: letto matrimoniale, armadio aperto, poltrona e tavolino', en: 'Deluxe room: double bed, open wardrobe, armchair and coffee table' } },
+      { src: 'rooms/deluxe-angolo', alt: { it: 'Angolo con poltrona e scrivania nella camera Deluxe', en: 'Armchair and desk corner in the Deluxe room' } },
+      { src: 'rooms/deluxe-scrivania', alt: { it: 'Macchina Nespresso, bollitore e tazze sulla scrivania della Deluxe', en: 'Nespresso machine, kettle and cups on the Deluxe room’s desk' } },
       { src: 'rooms/deluxe-doccia', alt: { it: 'La doccia doppia della camera Deluxe, piastrelle verdi', en: 'The Deluxe room’s double shower, green tiles' } },
       { src: 'rooms/deluxe-bagno', alt: { it: 'Lavabo freestanding e specchio ad arco nel bagno della Deluxe', en: 'Freestanding basin and arched mirror in the Deluxe bathroom' } },
-      { src: 'rooms/deluxe-angolo', alt: { it: 'Angolo con poltrona nella camera Deluxe', en: 'Armchair corner in the Deluxe room' } },
     ],
     verify: { level: 'blocker', note: capacityNote },
   },
@@ -79,17 +87,18 @@ export const rooms = [
     number: 'Terrazza',
     category: { it: 'Doppia/Tripla con terrazza', en: 'Double/Triple with terrace' },
     summary: {
-      it: 'Con una terrazza privata tra le viti — è da qui che viene il nome della casa. Travi a vista e frigobar in camera.',
-      en: 'With a private terrace among the vines — the house takes its name from it. Exposed beams and a minibar in the room.',
+      it: 'Con una terrazza privata tra le viti — è da qui che viene il nome della casa. Travi a vista, frigobar in camera e un bagno con la doccia color turchese.',
+      en: 'With a private terrace among the vines — the house takes its name from it. Exposed beams, a minibar in the room and a bathroom with a turquoise-tiled shower.',
     },
     photos: [
       { src: 'rooms/terrazza-esterno', alt: { it: 'La terrazza privata, con il salottino tra le piante', en: 'The private terrace, its lounge among the plants' } },
-      { src: 'rooms/terrazza-camera', alt: { it: 'Camera con terrazza, travi a vista e porta finestra', en: 'Terrace room, exposed beams and French window' } },
-      { src: 'rooms/terrazza-letto', alt: { it: 'Il letto della camera con terrazza', en: 'The bed in the terrace room' } },
-      { src: 'rooms/terrazza-bagno', alt: { it: 'Bagno della camera con terrazza', en: 'Terrace room bathroom' } },
+      { src: 'rooms/terrazza-camera', alt: { it: 'Camera con terrazza: letto matrimoniale, tavolino e poltrona', en: 'Terrace room: double bed, side table and armchair' } },
+      { src: 'rooms/terrazza-travi', alt: { it: 'Travi a vista e la porta finestra sulla terrazza', en: 'Exposed beams and the French window onto the terrace' } },
+      { src: 'rooms/terrazza-accesso', alt: { it: 'L’angolo con poltrona, accanto alla porta finestra sulla terrazza', en: 'The armchair corner, beside the French window onto the terrace' } },
+      { src: 'rooms/terrazza-doccia', alt: { it: 'La doccia della camera con terrazza, piastrelle turchesi', en: 'The terrace room’s shower, turquoise tiles' } },
+      { src: 'rooms/terrazza-bagno', alt: { it: 'Bagno della camera con terrazza: pietra e lavabo freestanding', en: 'Terrace room bathroom: stone and a freestanding basin' } },
     ],
-    verify: { level: 'blocker',
-      note: `${capacityNote} Inoltre: il Property Pack descrive il bagno di questa camera “color turchese”, mentre la foto che la vecchia pagina gli attribuiva (rooms/terrazza-bagno) ha toni pietra — confermare l’abbinamento o sostituire la foto. Il testo non nomina il colore finché non è chiarito.` },
+    verify: { level: 'blocker', note: capacityNote },
   },
 ];
 

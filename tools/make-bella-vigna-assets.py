@@ -4,10 +4,13 @@ Build Bella Vigna's brand assets from the one logo the property supplied.
 
     python3 -I tools/make-bella-vigna-assets.py
 
-Source: assets/img/_src/brand/bella-vigna-logo.png — the classic gold logo
-(Duomo skyline, "Bella Vigna" script, B&B, vines), recovered unaltered from the
-June 2026 page (legacy/index.html). Nothing here redraws the mark: every output
-is a crop, a resize or a composition of those same pixels.
+Source: assets/img/_src/brand/Bella_Vigna_logo_oro_classico.jpg — the classic
+gold logo (Duomo skyline, "Bella Vigna" script, B&B, vines) exactly as Valentina
+Longo sent it by email on 11 March 2026: 1024 x 1024, gold on a cream ground.
+The guide needs it on transparency, so the ground is taken out and nothing else:
+each pixel becomes the gold that, laid back over that same cream, gives exactly
+the original pixel (see `from_original`). Nothing here redraws the mark: every
+output is a crop, a resize or a composition of those same pixels.
 
 Outputs (committed; the guide never builds anything at runtime):
 
@@ -34,11 +37,12 @@ import numpy as np
 from PIL import Image, ImageDraw
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-SRC = os.path.join(ROOT, 'assets/img/_src/brand/bella-vigna-logo.png')
+SRC = os.path.join(ROOT, 'assets/img/_src/brand/Bella_Vigna_logo_oro_classico.jpg')
 
 PAPER = (251, 248, 242)
 PAPER_DEEP = (238, 228, 208)
 GOLD = (152, 112, 40)
+LAYOUT = (708, 501)
 
 
 def out(*parts):
@@ -104,10 +108,44 @@ def gradient(size, top_left, bottom_right):
     return base.convert('RGBA')
 
 
+def from_original(path):
+    """
+    The original JPEG's gold, on transparency, framed as the crops below expect.
+
+    The ground is sampled from the border (it is one flat cream). For each pixel,
+    alpha is how far it is from that cream towards black, the most any channel
+    needs; the colour is what, at that alpha over the cream, gives the original
+    pixel back. So the logo shown on the guide's paper is the original, and on
+    any other ground it is the same gold. Pixels within JPEG noise of the cream
+    are the ground and become fully transparent.
+    """
+    rgb = np.asarray(Image.open(path).convert('RGB'), dtype=np.float64)
+    border = np.concatenate([rgb[:16].reshape(-1, 3), rgb[-16:].reshape(-1, 3),
+                             rgb[:, :16].reshape(-1, 3), rgb[:, -16:].reshape(-1, 3)])
+    ground = np.median(border, axis=0)
+    alpha = np.clip((ground - rgb) / ground, 0, 1).max(axis=2)
+    alpha[alpha < 0.02] = 0
+    safe = np.where(alpha > 0, alpha, 1)[..., None]
+    colour = np.clip((rgb - (1 - alpha[..., None]) * ground) / safe, 0, 255)
+    rgba = np.dstack([colour, alpha * 255]).round().astype(np.uint8)
+    logo = Image.fromarray(rgba, 'RGBA')
+    # Framed on every pixel of ink, faint ones included, as the June copy was.
+    logo = logo.crop(logo.getchannel('A').getbbox())
+
+    # The crops in `main` were measured on the same logo framed tight at 708 px
+    # wide (the copy the June 2026 page carried): scale to that width, keeping
+    # the proportions, and resample premultiplied so no cream fringe returns.
+    height = round(LAYOUT[0] * logo.height / logo.width)
+    if abs(height - LAYOUT[1]) > 3:
+        sys.exit(f'unexpected logo proportions {logo.size}: the crops below are measured on 708x501')
+    logo = logo.convert('RGBa').resize((LAYOUT[0], height), Image.LANCZOS).convert('RGBA')
+    framed = Image.new('RGBA', LAYOUT, (0, 0, 0, 0))
+    framed.alpha_composite(logo, (0, 0))
+    return framed
+
+
 def main():
-    logo = Image.open(SRC).convert('RGBA')
-    if logo.size != (708, 501):
-        sys.exit(f'unexpected logo size {logo.size}: the crops below are measured on 708x501')
+    logo = from_original(SRC)
 
     skyline = trim(logo.crop((0, 0, 708, 214)))
 

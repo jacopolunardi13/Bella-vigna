@@ -9,6 +9,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 import {
@@ -214,33 +215,45 @@ test('every room shows at least one photograph of itself', () => {
 });
 
 /**
- * Each room shows the photographs the property's own June 2026 page captioned for
- * it, and no other. The page is the only attribution there is (no owner-confirmed
+ * Each room shows the photographs chosen for it from the property's Drive, and no
+ * other. The rooms are told apart by their bathrooms — caramel tiles in the
+ * Standard, the green double shower in the Deluxe, turquoise in the terrace room —
+ * and by furniture that recurs in every shot of the same room (no owner-confirmed
  * gallery exists yet), so the mapping is pinned here: a photo drifting into the
  * wrong room has to fail a test, not wait for a guest to notice.
  */
-test('the attributions from the property’s own page hold, room by room', () => {
+test('the attributions hold, room by room', () => {
   const gallery = (id) => rooms.find((room) => room.id === id).photos.map((photo) => photo.src);
-  assert.deepEqual(gallery('Standard'), ['rooms/standard-camera', 'rooms/standard-bagno']);
-  assert.deepEqual(gallery('Deluxe'),
-    ['rooms/deluxe-camera', 'rooms/deluxe-doccia', 'rooms/deluxe-bagno', 'rooms/deluxe-angolo']);
-  assert.deepEqual(gallery('Terrazza'),
-    ['rooms/terrazza-esterno', 'rooms/terrazza-camera', 'rooms/terrazza-letto', 'rooms/terrazza-bagno']);
+  assert.deepEqual(gallery('Standard'), ['rooms/standard-camera', 'rooms/standard-letto',
+    'rooms/standard-dotazioni', 'rooms/standard-bagno', 'rooms/standard-doccia']);
+  assert.deepEqual(gallery('Deluxe'), ['rooms/deluxe-camera', 'rooms/deluxe-angolo',
+    'rooms/deluxe-scrivania', 'rooms/deluxe-doccia', 'rooms/deluxe-bagno']);
+  assert.deepEqual(gallery('Terrazza'), ['rooms/terrazza-esterno', 'rooms/terrazza-camera',
+    'rooms/terrazza-travi', 'rooms/terrazza-accesso', 'rooms/terrazza-doccia', 'rooms/terrazza-bagno']);
 });
 
 /**
- * One attribution is doubtful and must stay visibly so: the Property Pack says the
- * terrace room's bathroom is turquoise, and the photograph the old page gave it is
- * stone-coloured. The text names no colour, and the room carries the question.
+ * Every gallery photograph is one the import tool produced from a Drive original,
+ * so none can be a leftover of the June page or a picture from somewhere else.
  */
-test('the doubtful terrace bathroom stays flagged, and unnamed in the copy', () => {
+test('every room photograph comes from the Drive import list', async () => {
+  const tool = await readFile(new URL('../tools/import-room-photos.py', import.meta.url), 'utf8');
+  const imported = new Set([...tool.matchAll(/^\s+\('([a-z-]+)',\s+'(?:main|settembre)'/gm)].map((m) => `rooms/${m[1]}`));
+  const strays = rooms.flatMap((room) => room.photos.map((photo) => photo.src)).filter((src) => !imported.has(src));
+  assert.deepEqual(strays, []);
+});
+
+/**
+ * The terrace bathroom question is settled by the Drive photographs: the same
+ * bathroom has the stone walls the June page showed and the turquoise shower the
+ * Property Pack describes. The room says so, and carries no photo doubt any more.
+ */
+test('the terrace room shows its turquoise shower and names it', () => {
   const terrace = rooms.find((room) => room.id === 'Terrazza');
-  assert.equal(terrace.verify?.level, 'blocker');
-  assert.match(terrace.verify.note, /turchese/);
-  assert.match(terrace.verify.note, /terrazza-bagno/);
-  for (const lang of ['it', 'en']) {
-    assert.doesNotMatch(terrace.summary[lang], /turchese|turquoise/i);
-  }
+  assert.ok(terrace.photos.some((photo) => /turches/.test(photo.alt.it) && /turquoise/.test(photo.alt.en)));
+  assert.match(terrace.summary.it, /turchese/);
+  assert.match(terrace.summary.en, /turquoise/);
+  assert.doesNotMatch(terrace.verify.note, /terrazza-bagno/);
 });
 
 /** Capacity and the QuoVai identifier are unknown for every room, and say so. */

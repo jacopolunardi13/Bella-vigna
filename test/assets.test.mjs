@@ -84,7 +84,7 @@ test('the Pass wears the artwork, at both densities', async () => {
   // Bella Vigna's card is composed from the property's own logo — its skyline and
   // its vines in gold on warm paper — by a script that is committed with its source,
   // so it can be rebuilt or re-framed rather than edited by hand.
-  assert.ok(await exists(resolve(ROOT, 'assets/img/_src/brand/bella-vigna-logo.png')), 'the logo the artwork is cut from is kept');
+  assert.ok(await exists(resolve(ROOT, 'assets/img/_src/brand/Bella_Vigna_logo_oro_classico.jpg')), 'the logo the artwork is cut from is kept');
   assert.ok(await exists(resolve(ROOT, 'tools/make-bella-vigna-assets.py')), 'and so is the recipe');
 
   // The two widths the card actually uses: 1x on a plain screen, 2x on a phone.
@@ -179,7 +179,47 @@ test('the Bella Vigna mark is there, and is the logo’s own script', async () =
   assert.ok(ratio > 3.4 && ratio < 4.2, `the script's own proportions are preserved (${ratio.toFixed(2)}:1)`);
 
   // The source it was cut from is kept, so it can be rebuilt or replaced.
-  assert.ok(await exists(resolve(ROOT, 'assets/img/_src/brand/bella-vigna-logo.png')), 'the original is kept');
+  assert.ok(await exists(resolve(ROOT, 'assets/img/_src/brand/Bella_Vigna_logo_oro_classico.jpg')), 'the original is kept');
+});
+
+/**
+ * The logo is the file the property sent (Valentina Longo, email of 11 March 2026),
+ * byte for byte: the guide's versions are derived from it by a script, and the
+ * original itself is never re-saved, re-cropped or re-coloured.
+ */
+test('the original logo is kept exactly as it was delivered', async () => {
+  const { createHash } = await import('node:crypto');
+  const bytes = await readFile(resolve(ROOT, 'assets/img/_src/brand/Bella_Vigna_logo_oro_classico.jpg'));
+  assert.equal(createHash('sha256').update(bytes).digest('hex'),
+    'cdfc4044106121274100b507846bcc3bd15e8d126e1eccc9ad327ddc7a73eb3c');
+});
+
+/** The chunk ids of a WebP file (RIFF: id, little-endian size, payload padded to even). */
+function webpChunks(bytes) {
+  const ids = [];
+  for (let at = 12; at + 8 <= bytes.length; at += 8 + bytes.readUInt32LE(at + 4) + (bytes.readUInt32LE(at + 4) % 2)) {
+    ids.push(bytes.subarray(at, at + 4).toString('ascii'));
+  }
+  return ids;
+}
+
+/**
+ * Room photographs carry no camera metadata: an iPhone original holds the date,
+ * the device and often the position, and none of it belongs on a guest's phone.
+ */
+test('no room photograph carries EXIF metadata', async () => {
+  const { readdir } = await import('node:fs/promises');
+  const dirs = ['assets/img/_src/rooms', 'assets/img/rooms'];
+  const tagged = [];
+  for (const dir of dirs) {
+    for (const name of await readdir(resolve(ROOT, dir))) {
+      if (!/\.(jpe?g|webp)$/.test(name)) continue;
+      const bytes = await readFile(resolve(ROOT, dir, name));
+      if (name.endsWith('.webp') ? webpChunks(bytes).some((id) => id === 'EXIF' || id === 'XMP ')
+        : bytes.includes(Buffer.from('Exif\0\0', 'latin1'))) tagged.push(`${dir}/${name}`);
+    }
+  }
+  assert.deepEqual(tagged, []);
 });
 
 test('the custom-property rule would catch the bug it was written for', async () => {

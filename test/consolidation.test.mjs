@@ -485,9 +485,11 @@ test('the rooms are the current mapping, and the future is not published', () =>
 
   // The triple, as it actually is: the terrace room, and only that one.
   assert.deepEqual(rooms.filter((room) => /tripla/i.test(room.category.it)).map((room) => room.id), ['Terrazza']);
-  // And a detail the Property Pack and the photograph disagree on is not claimed.
+  // The Pack's turquoise bathroom is now shown by the property's own photographs,
+  // so the room names it, in both languages.
   const terrace = rooms.find((room) => room.id === 'Terrazza');
-  assert.equal(/turchese|turquoise/i.test(JSON.stringify(terrace.summary)), false, 'the bathroom colour waits');
+  assert.match(terrace.summary.it, /turchese/);
+  assert.match(terrace.summary.en, /turquoise/);
 });
 
 test('every interface string exists in both languages', () => {

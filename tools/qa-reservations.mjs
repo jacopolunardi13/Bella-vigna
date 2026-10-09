@@ -602,7 +602,7 @@ await page.screenshot({ path: `${OUT}/cancelled-390.png` });
 
    And the photographs with it: at LunArt it was room 304's bathroom, confirmed by
    the owner, against the desk-and-window shot that belongs to 302. Here each room
-   wears its own pictures from the property's page (rooms/standard-*, deluxe-*,
+   wears its own pictures from the property's Drive (rooms/standard-*, deluxe-*,
    terrazza-*) and nothing from another room or from the house's own pictures. */
 console.log('\n── one room each ──');
 
