@@ -1,0 +1,113 @@
+/**
+ * Talking to the commerce API.
+ *
+ * The catalogue — including every amount — is fetched rather than imported, so the
+ * prices the guide shows are the ones the server will charge. The browser keeps a
+ * copy to render from and sends none of it back: a cart line is ids and dates.
+ *
+ * Everything degrades. If the API is not there — the guide served as static files
+ * with no server behind it — the shop says so and points at the Concierge instead
+ * of showing a broken checkout.
+ */
+
+import { applyPriceOverrides } from '../../commerce/prices.js';
+import { applySchedule } from '../../commerce/schedule.js';
+import { applyPartners, partnerNetwork as registerNetwork } from '../../commerce/partners.js';
+import { guideToken } from '../guest.js';
+
+const BASE = '/api';
+
+let catalogue = null;
+let catalogueError = null;
+
+async function request(path, { method = 'GET', body, signal } = {}) {
+  const response = await fetch(`${BASE}${path}`, {
+    method,
+    signal,
+    headers: body ? { 'content-type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(payload.error ?? `request failed (${response.status})`);
+    error.status = response.status;
+    error.payload = payload;
+    throw error;
+  }
+  return payload;
+}
+
+/**
+ * Load the catalogue once per session.
+ *
+ * The amounts it carries are applied to the shared pricing module straight away,
+ * so the cart's arithmetic in the browser and the server's at checkout come from
+ * the same table rather than from two copies that might drift.
+ */
+export async function loadCatalogue({ force = false } = {}) {
+  if (catalogue && !force) return catalogue;
+  try {
+    const payload = await request('/catalog');
+    applyPriceOverrides(payload.prices ?? {});
+    applySchedule(payload.schedule ?? null);
+    // The partner register in force, for the same reason as the prices: what the
+    // guide shows and what the server will honour have to be one list.
+    applyPartners(payload.partners?.length ? payload.partners : null);
+    catalogue = payload;
+    catalogueError = null;
+  } catch (error) {
+    catalogueError = error;
+    catalogue = null;
+  }
+  return catalogue;
+}
+
+export const catalogueAvailable = () => Boolean(catalogue);
+export const catalogueProblem = () => catalogueError;
+
+/** The appointment days a product has on offer, as the server published them. */
+export const availableDays = (productId) => catalogue?.availability?.[productId]?.days ?? [];
+
+/** The times free on one day. Asked for when a day is picked, never guessed. */
+export const fetchSlots = (productId, date) =>
+  request(`/availability/${encodeURIComponent(productId)}?date=${encodeURIComponent(date)}`);
+
+/** What comes with the stay, and what the card adds. Two different promises. */
+export const stayBenefits = () => catalogue?.stayBenefits ?? [];
+export const cardBenefits = () => catalogue?.cardBenefits ?? [];
+
+/**
+ * The whole network, built from the register the server published.
+ *
+ * Not a third list on the wire: `/api/catalog` already sends the partners in force
+ * and `loadCatalogue` applies them, so the browser runs the same selector the
+ * server would and gets the same order.
+ */
+export const partnerNetwork = () => registerNetwork();
+
+export const priceCartRemotely = (lines) =>
+  request('/cart/price', { method: 'POST', body: { lines, guideToken: guideToken() } });
+
+export const startCheckout = (payload) =>
+  request('/checkout', { method: 'POST', body: { ...payload, guideToken: guideToken() } });
+
+export const fetchOrder = (accessToken) => request(`/orders/${encodeURIComponent(accessToken)}`);
+
+/**
+ * Call one line of an order off.
+ *
+ * Sends which line and how many, and nothing else — no amount, no date, no policy.
+ * The server recomputes all of it from the stored order and the catalogue, which is
+ * the only arrangement under which a button in a browser can be allowed to move
+ * money. What comes back is the whole order again, already recalculated.
+ */
+export const cancelOrderLine = (accessToken, line, quantity) =>
+  request(`/orders/${encodeURIComponent(accessToken)}/cancel`, {
+    method: 'POST',
+    body: { line, ...(quantity ? { quantity } : {}) },
+  });
+
+export const fetchCard = (accessToken) => request(`/card/${encodeURIComponent(accessToken)}`);
+
+export const validateCard = (reference, code) =>
+  request('/card/validate', { method: 'POST', body: { reference, code } });

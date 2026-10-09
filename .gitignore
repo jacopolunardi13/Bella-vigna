@@ -1,0 +1,12 @@
+node_modules/
+.DS_Store
+*.log
+.cache/
+tools/.qa-screens/
+
+# Environment files never belong in the repository.
+.env
+.env.*
+!.env.example
+data/orders/
+tools/.preview/
