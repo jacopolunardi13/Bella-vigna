@@ -128,7 +128,39 @@ export async function createConsoleApp({ config, store, fetchImpl, pushTransport
     }, noStore);
   }
 
-  async function getHealth(req, res) {
+  /**
+   * `?deep=1`: whether each house answers, accepts the console's credential, is
+   * the house it should be, and runs in demonstration mode — yes/no only, never a
+   * record, an address or a secret. It is how a deployment is checked from outside
+   * without signing in. Cached for 30 seconds, so it cannot be used to hammer the
+   * properties.
+   */
+  let deepCache = { at: 0, value: null };
+  async function deepCheck() {
+    if (deepCache.value && now() - deepCache.at < 30_000) return deepCache.value;
+    const value = await Promise.all(config.properties.map(async (property) => {
+      let reachable = false;
+      let preview = null;
+      try {
+        const answer = await (fetchImpl ?? fetch)(`${property.url}/api/health`, { signal: AbortSignal.timeout(config.upstreamTimeoutMs) });
+        reachable = answer.ok;
+        preview = Boolean((await answer.json().catch(() => ({}))).preview);
+      } catch { /* unreachable */ }
+      const staff = await upstream.call(property, { method: 'GET', path: '/dashboard' });
+      return {
+        id: property.id,
+        reachable,
+        preview,
+        credentialAccepted: staff.status === 200,
+        sameHouse: staff.payload?.error !== 'property-mismatch',
+        error: staff.status === 200 ? null : staff.payload?.error ?? `status-${staff.status}`,
+      };
+    }));
+    deepCache = { at: now(), value };
+    return value;
+  }
+
+  async function getHealth(req, res, _params, url) {
     sendJson(res, 200, {
       ok: true,
       service: 'staff-console',
@@ -137,6 +169,7 @@ export async function createConsoleApp({ config, store, fetchImpl, pushTransport
       properties: config.properties.map((p) => ({ id: p.id, name: p.name, credential: Boolean(p.token), relay: Boolean(p.relaySecret) })),
       setup: Boolean(config.setupCode),
       push: push.configured,
+      ...(url?.searchParams.get('deep') === '1' ? { checks: await deepCheck() } : {}),
     }, noStore);
   }
 

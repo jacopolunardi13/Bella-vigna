@@ -516,6 +516,20 @@ test('a guide server never serves the console’s page or worker (it would take 
   assert.equal((await fetch(`${env.origin}/console-sw.js`)).status, 200, 'the console serves its own');
 });
 
+test('the deep health check says, per house, reachable / accepted / right house / demo mode — and nothing else', async (t) => {
+  const env = await withConsole(t, { lunartClaim: 'bella-vigna' });
+  const answer = await env.client().get('/console/api/health?deep=1');
+  assert.equal(answer.status, 200);
+  const byId = Object.fromEntries(answer.body.checks.map((c) => [c.id, c]));
+  assert.deepEqual(byId['bella-vigna'], {
+    id: 'bella-vigna', reachable: true, preview: false, credentialAccepted: true, sameHouse: true, error: null,
+  });
+  // The fake LunArt answers as Bella Vigna here: the check catches it.
+  assert.equal(byId.lunart.sameHouse, false);
+  assert.equal(byId.lunart.credentialAccepted, false);
+  for (const secret of [SECRETS.bvService, SECRETS.lunartService, env.bvUrl]) assert.ok(!answer.text.includes(secret));
+});
+
 test('the console refuses a store that is not a console’s', async () => {
   const backend = { name: 'memory', async load() { return { meta: { property_id: 'lunart' }, reservations: { a: {} } }; }, async save() {} };
   await assert.rejects(() => createConsoleStore({ backend }), { code: 'console-store-refused' });

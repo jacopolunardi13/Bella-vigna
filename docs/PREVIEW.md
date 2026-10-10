@@ -5,7 +5,7 @@ Tre servizi di prova, tutti in modalità dimostrazione, nessuno di produzione:
 | Servizio | Cosa | Indirizzo previsto |
 |---|---|---|
 | `bella-vigna-preview` | la Guest Guide Bella Vigna completa (guida, Extras, Pass, prenotazioni inventate) | https://bella-vigna-preview.onrender.com/preview |
-| `lunart-staff-staging` | il codice LunArt della PR #6, in anteprima, con prenotazioni inventate — **non** il LunArt in produzione | https://lunart-staff-staging.onrender.com |
+| `lunart-pr6-staging` | il codice LunArt della PR #6, in anteprima, con prenotazioni inventate — **non** il LunArt in produzione | https://lunart-pr6-staging.onrender.com |
 | `staff-console-staging` | la Staff App unica per le due strutture, con passkey | https://staff-console-staging.onrender.com |
 
 Più un database Postgres gratuito per la console (persone e passkey), che scade

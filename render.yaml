@@ -4,7 +4,7 @@
 # none of them production:
 #
 #   bella-vigna-preview     the Bella Vigna guide and its Staff API (this branch)
-#   lunart-staff-staging    LunArt's code from the PR branch `feat/staff-console-bridge`
+#   lunart-pr6-staging    LunArt's code from the PR branch `feat/staff-console-bridge`
 #                           (jacopolunardi13/lunart#6), in LUNART_PREVIEW mode, with
 #                           invented reservations — NOT LunArt's production service
 #   staff-console-staging   the single Staff app for both houses (passkeys)
@@ -37,7 +37,7 @@ envVarGroups:
       - key: CONSOLE_PROPERTY_BELLA_VIGNA_URL
         value: https://bella-vigna-preview.onrender.com
       - key: CONSOLE_PROPERTY_LUNART_URL
-        value: https://lunart-staff-staging.onrender.com
+        value: https://lunart-pr6-staging.onrender.com
 
 databases:
   - name: staff-console-staging-db
@@ -98,7 +98,7 @@ services:
 
   # ── LunArt, from its PR branch, in demonstration mode ──────────────────────
   - type: web
-    name: lunart-staff-staging
+    name: lunart-pr6-staging
     runtime: node
     plan: free
     region: frankfurt
@@ -176,12 +176,12 @@ services:
       - key: CONSOLE_PROPERTY_LUNART_TOKEN
         fromService:
           type: web
-          name: lunart-staff-staging
+          name: lunart-pr6-staging
           envVarKey: CONSOLE_SERVICE_TOKEN
       - key: CONSOLE_PROPERTY_LUNART_RELAY_SECRET
         fromService:
           type: web
-          name: lunart-staff-staging
+          name: lunart-pr6-staging
           envVarKey: CONSOLE_RELAY_SECRET
       # CONSOLE_PUBLIC_URL is deliberately absent: the console uses
       # RENDER_EXTERNAL_URL, the address it actually has, and binds passkeys to it.
