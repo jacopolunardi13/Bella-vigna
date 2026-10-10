@@ -84,15 +84,18 @@ export function buildMimeMessage({ to, from, fromName = brand.mail.fromName, sub
  */
 export function createGmailMailer(settings = {}) {
   const {
-    gmailClientId, gmailClientSecret, gmailRefreshToken,
     mailFrom = brand.mail.defaultFrom, mailReplyTo = '',
     fetchImpl = fetch,
   } = settings;
+  // Its own grant when there is one (GMAIL_SEND_*, gmail.send only); otherwise the
+  // reading grant, as before.
+  const separate = Boolean(settings.gmailSendRefreshToken);
+  const pick = (own, shared) => (separate ? own : settings[shared]);
 
   const client = createOauthClient({
-    clientId: gmailClientId,
-    clientSecret: gmailClientSecret,
-    refreshToken: gmailRefreshToken,
+    clientId: pick(settings.gmailSendClientId, 'gmailClientId'),
+    clientSecret: pick(settings.gmailSendClientSecret, 'gmailClientSecret'),
+    refreshToken: pick(settings.gmailSendRefreshToken, 'gmailRefreshToken'),
     fetchImpl,
   });
 
@@ -103,8 +106,10 @@ export function createGmailMailer(settings = {}) {
     implemented: true,
     /** Credentials and a sender: a token with nowhere to send from is not a mailer. */
     configured: client.configured && Boolean(mailFrom),
-    requires: ['GMAIL_CLIENT_ID', 'GMAIL_CLIENT_SECRET', 'GMAIL_REFRESH_TOKEN', 'MAIL_FROM'],
+    requires: ['GMAIL_SEND_CLIENT_ID', 'GMAIL_SEND_CLIENT_SECRET', 'GMAIL_SEND_REFRESH_TOKEN', 'MAIL_FROM'],
     scopes: [GMAIL_SEND_SCOPE],
+    /** Whether sending has its own grant, separate from the one that reads. */
+    separateGrant: separate,
     from: mailFrom,
     state: () => ({ ...state }),
 

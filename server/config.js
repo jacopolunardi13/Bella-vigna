@@ -164,6 +164,16 @@ export const config = {
   // Nothing leaves a preview: the mailer stays the simulated one, which renders the
   // email and keeps the body.
   mailProvider: unlessPreview(env.MAIL_PROVIDER),
+  /**
+   * Sending on its own Google grant, `gmail.send` only: the account that sends the
+   * guide cannot read a mailbox, and the grant that reads QuoVai's notifications
+   * cannot send. With no GMAIL_SEND_* the sender falls back to the reading grant,
+   * as LunArt runs today, and the health check and warnings say so.
+   */
+  gmailSendClientId: unlessPreview(env.GMAIL_SEND_CLIENT_ID ?? env.GMAIL_CLIENT_ID),
+  gmailSendClientSecret: unlessPreview(env.GMAIL_SEND_CLIENT_SECRET ?? env.GMAIL_CLIENT_SECRET),
+  gmailSendRefreshToken: unlessPreview(env.GMAIL_SEND_REFRESH_TOKEN ?? env.GMAIL_REFRESH_TOKEN),
+  gmailSendSeparate: Boolean(env.GMAIL_SEND_REFRESH_TOKEN),
   /** No default: the sending address is the property's to decide (see `data/brand.js`). */
   mailFrom: env.MAIL_FROM ?? brand.mail.defaultFrom,
   mailReplyTo: env.MAIL_REPLY_TO ?? '',
@@ -228,8 +238,10 @@ export function configWarnings() {
   }
   if (!config.mailProvider) {
     warnings.push('MAIL_PROVIDER is not set: guest guide emails are scheduled and rendered but never sent.');
-  } else if (config.mailProvider === 'gmail' && !(config.gmailClientId && config.gmailClientSecret && config.gmailRefreshToken)) {
+  } else if (config.mailProvider === 'gmail' && !(config.gmailSendClientId && config.gmailSendClientSecret && config.gmailSendRefreshToken)) {
     warnings.push('MAIL_PROVIDER=gmail but the Gmail credentials are missing: nothing can be sent, and sends fall back to simulated.');
+  } else if (config.mailProvider === 'gmail' && config.mailboxSource === 'gmail' && !config.gmailSendSeparate) {
+    warnings.push('Reading QuoVai notifications and sending guide emails share one Gmail grant. Set GMAIL_SEND_REFRESH_TOKEN (gmail.send only) to separate them.');
   } else if (config.deliveryPollMinutes <= 0) {
     warnings.push('DELIVERY_POLL_MINUTES is 0: emails are scheduled but nothing sends them on a timer.');
   }

@@ -7,6 +7,17 @@ riempire un vuoto: finché una voce è aperta, la guida la dichiara o la nascond
 La lista completa e sempre aggiornata dei punti di contenuto è la schermata di
 revisione: **`/?review=1`** sull'anteprima (invisibile agli ospiti).
 
+## 0. Prossimo passo: cosa serve adesso, e cosa può aspettare
+
+Stato reale di ogni integrazione (A sviluppato · B testato · C integrato · D validato ·
+E attivo) e piano QuoVai-first: `docs/INTEGRAZIONI.md`. Oggi nessuna integrazione di
+Bella Vigna è oltre lo stato B. Migrazione della Staff App: `docs/MIGRAZIONE-STAFF.md`.
+
+| Serve per il prossimo passo | Può aspettare l'apertura al pubblico |
+|---|---|
+| Pubblicare lo staging su Render (un'azione sul tuo account) | Tutte le voci A, B, D qui sotto |
+| Da QuoVai Bella Vigna, in sola lettura: indirizzo che riceve le notifiche, nomi/codici e capienza delle camere, portali collegati e come, URL iCal (Q1) | Mittente email, Stripe, dominio |
+
 ## A. Conferme dell'operatore — contenuti bloccanti
 
 | # | Da confermare | Dove si applica |
@@ -32,7 +43,7 @@ revisione: **`/?review=1`** sull'anteprima (invisibile agli ospiti).
 | # | Da fare / confermare | Note |
 |---|---|---|
 | B1 | **WhatsApp Business condiviso** (+39 392 566 1488): nome e foto profilo che vede l'ospite BV; instradamento a Diego; etichette e risposte rapide che nominano la struttura | Dettagli in `docs/WHATSAPP.md`. La guida apre ogni chat con "Scrivo da ospite di Bella Vigna Firenze" |
-| B2 | **Mittente email** delle Guest Guide (es. info@bellavignafirenze.it): account, operatività, autorizzazione all'invio Gmail API | `MAIL_FROM`, `MAIL_PROVIDER=gmail`, credenziali Gmail con `gmail.send` |
+| B2 | **Mittente email** delle Guest Guide (es. info@bellavignafirenze.it): account, operatività, autorizzazione Gmail **solo invio**, separata dalla lettura | `MAIL_FROM`, `MAIL_PROVIDER=gmail`, `GMAIL_SEND_CLIENT_ID/SECRET/REFRESH_TOKEN` (scope `gmail.send`) |
 | B3 | Dominio/sito e Instagram ufficiali | `data/property.js` → `unverifiedContacts` |
 | B4 | **Wi-Fi**: verificare il QR fisico nelle 3 camere; se si vuole la password come riserva sul link personale, inserirla **solo** come variabile `WIFI_PASSWORD` del servizio di produzione | Mai nel repository, nei log o in documenti |
 
@@ -40,7 +51,7 @@ revisione: **`/?review=1`** sull'anteprima (invisibile agli ospiti).
 
 | # | Variabile/i | Prerequisito |
 |---|---|---|
-| C1 | `RESERVATION_MAILBOX=gmail`, `GMAIL_CLIENT_ID/SECRET/REFRESH_TOKEN`, `GMAIL_QUERY` | Casella che riceve le notifiche **QuoVai di Bella Vigna**; leggere una notifica reale e confermare l'etichetta "Struttura" (`brand.quovaiPropertyNames`) e il formato camere (A5) |
+| C1 | `RESERVATION_MAILBOX=gmail`, `GMAIL_CLIENT_ID/SECRET/REFRESH_TOKEN` (scope `gmail.readonly`), `GMAIL_QUERY` | Casella che riceve le notifiche **QuoVai di Bella Vigna** (non è quella di Jacopo: da identificare, Q1); leggere una notifica reale e confermare l'etichetta "Struttura" (`brand.quovaiPropertyNames`) e il formato camere (A5). API QuoVai non usate (a pagamento; decisione del 9/10/2026) |
 | C2 | `QUOVAI_ICAL_FEEDS=Standard:…,Deluxe:…,Terrazza:…`, `ICAL_POLL_MINUTES` | URL dei feed iCal di Bella Vigna; prima "Esamina i feed" dallo Staff |
 | C3 | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Decidere: account Stripe proprio o condiviso con LunArt. Se condiviso, gli eventi sono separati da `metadata.property`; webhook dedicato all'URL di produzione BV |
 | C4 | `CARD_SIGNING_KEY`, `STAFF_TOKEN` | Nuovi, generati per Bella Vigna. **Mai** quelli di LunArt |
@@ -74,7 +85,7 @@ LunArt e Bella Vigna (`docs/STAFF-UNIFICATA.md`), costruita e provata in staging
 | # | Da fare per la produzione | Note |
 |---|---|---|
 | S1 | Approvare e fare il merge della PR LunArt #6 (ponte verso la console), poi il deploy di LunArt | Senza variabili nuove non cambia nulla in produzione |
-| S2 | Servizio console di produzione: indirizzo definitivo (es. `staff.<dominio>`), archivio persistente (disco o Postgres a pagamento), `CONSOLE_SETUP_CODE` nuovo | Le passkey sono legate all'indirizzo: chi ha provato lo staging le ricrea in produzione |
+| S2 | Dove vive la Staff App unica in produzione: **sull'indirizzo della Staff App LunArt attuale, `/staff`** (stessa icona, nessuna nuova installazione; consigliato) oppure su un indirizzo dedicato (una nuova installazione guidata). Archivio persistente, `CONSOLE_SETUP_CODE` nuovo | `docs/MIGRAZIONE-STAFF.md`. Le passkey sono legate all'indirizzo: quelle dello staging non passano alla produzione |
 | S3 | `CONSOLE_SERVICE_TOKEN` e `CONSOLE_RELAY_SECRET` nuovi per ciascuna struttura, gli stessi valori sulla console | Mai quelli dello staging, mai `STAFF_TOKEN` |
 | S4 | Primo accesso del titolare, inviti a Valentina e Diego, notifiche attivate sui loro telefoni | Consegna dei link di persona |
 | S5 | Ritiro del token condiviso: `STAFF_TOKEN_RETIRED=1` su LunArt e Bella Vigna quando tutti usano la console | Reversibile togliendo la variabile |

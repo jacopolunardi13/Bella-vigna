@@ -484,6 +484,14 @@ test('retiring the shared token: it stops working, the console keeps working, /s
   assert.equal(page.headers.get('location'), env.origin);
   const people = await everyoneEnrolled(env);
   assert.equal((await people.diego.client.get('/console/api/p/bella-vigna/dashboard')).status, 200);
+  // And phones are the console's alone: the property no longer pushes to the
+  // devices of its old /staff, so nothing arrives twice.
+  assert.equal(env.bv.push.localDelivery, false);
+});
+
+test('before the shared token is retired, the old app keeps its notifications too', async (t) => {
+  const env = await withConsole(t);
+  assert.equal(env.bv.push.localDelivery, true);
 });
 
 /* ── The page and the store ──────────────────────────────────────────────── */

@@ -15,20 +15,24 @@ Tutto parte dai branch di lavoro (`ccr-412adc5b-p2jc5l` qui, `feat/staff-console
 su LunArt). Non tocca `main`, il LunArt in produzione, né alcun pagamento, email o
 casella reale. **Costo: zero** (piani gratuiti).
 
-## Pubblicarlo (una volta sola)
+## Pubblicarlo (una volta sola, dal tuo account Render)
 
-Serve il proprio account Render: nessuno può farlo al posto del titolare, perché
-collega Render al GitHub del titolare.
+I servizi esistenti `lunart-production`, `lunart-staging` e `lunart-preview` non
+vengono toccati: il blueprint crea tre servizi nuovi con nomi diversi e un
+database nuovo, e non riusa variabili, archivi o database esistenti.
 
-1. Aprire https://render.com → **Sign in with GitHub**; autorizzare l'accesso ai
-   repository `jacopolunardi13/Bella-vigna` e `jacopolunardi13/lunart`.
-2. **New + → Blueprint** → repository `Bella-vigna`, branch `ccr-412adc5b-p2jc5l` →
-   Render legge `render.yaml` e mostra i 3 servizi e il database, tutti *Free* →
-   **Apply**.
-3. Attendere che i tre servizi siano *Live* (alcuni minuti la prima volta).
-4. Se Render ha assegnato a un servizio un indirizzo diverso da quelli in tabella
-   (succede quando il nome è già preso), correggerlo una volta in
-   **Env Groups → staff-staging-links**.
+1. Aprire questo link (con l'account Render già usato per LunArt):
+   https://render.com/deploy?repo=https://github.com/jacopolunardi13/Bella-vigna/tree/ccr-412adc5b-p2jc5l
+2. Se Render dice di non vedere il repository `Bella-vigna`: **Configure GitHub** →
+   aggiungere `Bella-vigna` ai repository autorizzati, poi riaprire il link.
+3. Render mostra 3 servizi e 1 database, tutti **Free** → **Apply**.
+
+Se Render segnala che esiste già un database gratuito nell'account (ne è ammesso
+uno), fermarsi: si decide insieme se togliere la persistenza dallo staging o
+approvare un piano a pagamento.
+
+Dopo pochi minuti i servizi sono *Live*. La verifica dall'esterno, senza credenziali:
+`node tools/verify-staging.mjs`.
 
 ## Dal telefono
 
@@ -46,7 +50,12 @@ la revisione dei dati da confermare.
 3. Su iPhone: Condividi → **Aggiungi alla schermata Home**, poi aprirla da lì:
    è il modo in cui iOS consente le notifiche push. In *Accesso → Attiva su questo
    telefono*.
-4. Per provare i ruoli: *Accesso → Persone → Link di primo accesso* per Valentina o
+4. **Un ordine simulato**: dalla guida personale di un ospite inventato → *Extra* →
+   ad esempio *Vino in camera* → paga sul checkout finto. In pochi secondi l'ordine
+   compare in *Nuovi* con l'etichetta Bella Vigna, e arriva la notifica
+   "Bella Vigna · …" ai telefoni che l'hanno attivata. Lo stesso dalla guida di
+   `lunart-pr6-staging` per un ordine LunArt.
+5. Per provare i ruoli: *Accesso → Persone → Link di primo accesso* per Valentina o
    Diego, aprire il link su un altro telefono (o un'altra finestra in incognito) e
    creare la passkey.
 

@@ -156,8 +156,16 @@ export function createPushAdapter(settings = {}) {
     fetchImpl: settings.relayFetch,
   });
 
+  /**
+   * Once the shared Staff token is retired and the console is wired, staff phones
+   * are the console's: this server stops pushing to the devices registered on its
+   * old /staff, so nobody gets the same notification twice. Before that, both run.
+   */
+  const localDelivery = !(settings.staffTokenRetired && relay);
+
   return {
     relay,
+    localDelivery,
     id: configured ? 'web-push' : 'simulated',
     implemented: true,
     configured,
@@ -241,7 +249,7 @@ export async function notifyStaff({ store, push, event, data = {} }) {
   // To the console first, and never at the cost of the request that caused it.
   const relayed = push.relay ? await push.relay.send(payload).catch((error) => ({ ok: false, error: error.message })) : null;
 
-  const subscriptions = await store.subscriptions.list({ limit: 50 });
+  const subscriptions = push.localDelivery === false ? [] : await store.subscriptions.list({ limit: 50 });
   const results = [];
 
   for (const subscription of subscriptions) {
@@ -262,6 +270,7 @@ export async function notifyStaff({ store, push, event, data = {} }) {
     removed: results.filter((r) => r.removed).length,
     simulated: !push.configured,
     devices: subscriptions.length,
+    localDelivery: push.localDelivery !== false,
     relayed,
     payload,
     results,

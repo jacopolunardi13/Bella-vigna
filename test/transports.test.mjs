@@ -439,6 +439,29 @@ test('a configured Gmail sender actually sends, and says it was not simulated', 
   assert.equal(mailer.state().sent, 1);
 });
 
+/**
+ * Reading and sending on separate grants (operator's request, 10 October 2026):
+ * with GMAIL_SEND_* the sender uses its own refresh token — the one that can only
+ * send — and never the one that reads QuoVai's notifications.
+ */
+test('the sender uses its own send-only grant when there is one', async () => {
+  const fetchImpl = scriptedFetch([
+    ['oauth2.googleapis.com/token', TOKEN],
+    ['/messages/send', { body: { id: 'sent-2', threadId: 'thread-2' } }],
+  ]);
+  const mailer = createGmailMailer({
+    ...CREDENTIALS,
+    gmailSendClientId: 'send-client', gmailSendClientSecret: 'send-secret', gmailSendRefreshToken: 'send-only-token',
+    mailFrom: 'guida@example.invalid', fetchImpl,
+  });
+  assert.equal(mailer.separateGrant, true);
+  await mailer.send({ to: 'marta@example.invalid', subject: 'Prova', text: 'ciao', html: '<p>ciao</p>' });
+  const tokenCall = fetchImpl.calls.find((call) => call.url.includes('oauth2.googleapis.com/token'));
+  assert.match(String(tokenCall.body), /send-only-token/);
+  assert.doesNotMatch(String(tokenCall.body), /refresh-token(?!s)/);
+  assert.equal(createGmailMailer({ ...CREDENTIALS, mailFrom: 'g@example.invalid' }).separateGrant, false, 'without it, as before');
+});
+
 test('a send that fails throws, so the delivery is retried rather than marked sent', async () => {
   const db = store();
   const fetchImpl = scriptedFetch([
@@ -476,7 +499,7 @@ test('choosing Gmail without credentials falls back to simulated rather than fai
   const mailer = createMailer({ mailProvider: 'gmail' });
   assert.equal(mailer.id, 'simulated');
   assert.equal(mailer.requestedProvider, 'gmail');
-  assert.ok(mailer.requires.includes('GMAIL_REFRESH_TOKEN'));
+  assert.ok(mailer.requires.includes('GMAIL_SEND_REFRESH_TOKEN'), 'sending asks for its own, send-only grant');
 
   const real = createMailer({ mailProvider: 'gmail', ...CREDENTIALS, mailFrom: 'guida@example.invalid' });
   assert.equal(real.id, 'gmail');
